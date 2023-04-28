@@ -23,6 +23,7 @@ SOURCEDIR := src
 BUILDDIR := build
 BUILDPY := $(BUILDDIR)/py
 BUILDCPP := $(BUILDDIR)/cpp
+BUILDDEP := $(BUILDDIR)/depends
 OUTCPP := bin
 OUTPY := python/modules
 
@@ -46,7 +47,7 @@ PYBIND = $(COMMON) -fPIC -Wall -shared -DLUKE_PYBIND
 
 # get every source file and each corresponding dependecy file
 SOURCES := $(wildcard $(SOURCEDIR)/*.cpp)
-DEPENDS := $(patsubst $(SOURCEDIR)/%.cpp, $(BUILDDIR)/depends/%.d, $(SOURCES))
+DEPENDS := $(patsubst $(SOURCEDIR)/%.cpp, $(BUILDDEP)/%.d, $(SOURCES))
 
 # define targets in the output directory
 CPPTARGETS := $(patsubst %, $(OUTCPP)/%, $(TARGET_LIST_CPP))
@@ -63,6 +64,10 @@ CPPTARGETOBJ := $(patsubst %, $(BUILDDIR)/%.o, $(TARGET_LIST_CPP))
 PYTARGETOBJ := $(patsubst %, $(BUILDDIR)/%.o, $(TARGET_LIST_PY))
 CPPSHAREDOBJ := $(patsubst $(SOURCEDIR)/%.cpp, $(BUILDCPP)/%.o, $(SOURCES))
 PYSHAREDOBJ := $(patsubst $(SOURCEDIR)/%.cpp, $(BUILDPY)/%.o, $(SOURCES))
+
+# create the directories if they don't exist
+DIRS := $(BUILDDIR) $(BUILDPY) $(BUILDCPP) $(BUILDDEP) $(OUTCPP) $(OUTPY)
+$(info $(shell mkdir -p $(DIRS)))
 
 # ----- start of make ----- #
 
@@ -100,7 +105,7 @@ include $(DEPENDS)
 endif
 
 # generate dependency files (-M for all, -MM for exclude system dependencies)
-$(BUILDDIR)/depends/%.d: $(SOURCEDIR)/%.cpp
+$(BUILDDEP)/%.d: $(SOURCEDIR)/%.cpp
 	@set -e; rm -f $@; \
 		g++ -MM $(COMMON) $< > $@.$$$$; \
 		sed 's,\($*\)\.o[ :]*,$(BUILDDIR)/\1.o $(BUILDCPP)/\1.o $(BUILDPY)/\1.o $@ : ,g' \
@@ -111,6 +116,6 @@ clean:
 	rm -f $(BUILDDIR)/*.o 
 	rm -f $(BUILDCPP)/*.o 
 	rm -f $(BUILDPY)/*.o 
-	rm -f $(BUILDDIR)/depends/*.d
+	rm -f $(BUILDDIR)/*.d
 	rm -f $(CPPTARGETS)
 	rm -f $(PYTARGETS)
