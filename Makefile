@@ -41,7 +41,7 @@ COMMON = $(DEBUG) -std=c++14 -mavx -pthread -I/usr/include/python3.6m \
 PYBIND = $(COMMON) -fPIC -Wall -shared -DLUKE_PYBIND
 
 # extra flags for make -jN => use N parallel cores
-# MAKEFLAGS += -j8
+MAKEFLAGS += -j8
 
 # ----- automatically generated variables ----- #
 
