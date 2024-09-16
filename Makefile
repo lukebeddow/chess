@@ -34,9 +34,15 @@ else
 DEBUG = -O2
 endif
 
+# define python location (if no source in venv, use: ln -s /usr/include/python3.8/ /home/path/to/env/name/include/python3.8)
+PYTHON = /home/luke/pyenv/py38_general
+PYTHON_EXE = $(PYTHON)/bin/python
+PYTHON_INCLUDE = $(PYTHON)/include/python3.8
+PYBIND_PATH = /home/luke/repo/pybind11
+
 # define compiler flags and libraries
-COMMON = $(DEBUG) -std=c++14 -mavx -pthread -I/usr/include/python3.6m \
-	-I/home/luke/pybind11/include \
+COMMON = $(DEBUG) -std=c++14 -mavx -pthread -I$(PYTHON_INCLUDE) \
+	-I$(PYBIND_PATH)/include \
 	-Wl,-rpath,'$$ORIGIN'
 PYBIND = $(COMMON) -fPIC -Wall -shared -DLUKE_PYBIND
 
