@@ -65,7 +65,7 @@ class ChessWindow:
         self.piece_h = round(self.piece_size * self.square_h)
 
         # root = r'C://Users//lukeb//OneDrive - University College London//Documents//Chess//128h//'
-        root = "/home/luke/chess_new/pieces/"
+        root = "/home/luke/chess/pieces/"
 
         # add in the pieces
         #self.wP = pygame.image.load(r'C:\Users\lukeb\OneDrive - University College London\Documents\Chess\128h\w_pawn_png_128px.png')
@@ -864,7 +864,8 @@ class ChessWindow:
 
             # check whos turn it is to play
             if self.game_board.get_white_to_play() == self.white_comp:
-                self.get_engine_move()
+                # self.get_engine_move()
+                self.get_human_move()
             else:
                 self.get_human_move()
 

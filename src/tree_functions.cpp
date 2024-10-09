@@ -1,11 +1,6 @@
 // Tree functions.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
 
-#include <pybind11/pybind11.h>
-#include <iostream>
-#include <numeric>
-#include <algorithm>
-
 #include "tree_functions.h"
 
 #if defined(LUKE_PYBIND)

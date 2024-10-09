@@ -4,6 +4,9 @@
 #include <boost/functional/hash.hpp>
 #include <chrono>
 #include <thread>
+#include <iostream>
+#include <numeric>
+#include <algorithm>
 
 #include "board_functions.h"
 
