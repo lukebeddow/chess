@@ -1864,6 +1864,8 @@ int linear_insert(int value, int start_index, std::vector<int>& vec)
 
     // if we get here, we didn't find anywhere to insert the value
     vec.push_back(value);
+
+    return vec.size() - 1;
 }
 
 std::vector<int> order_attackers_defenders(std::vector<int>& pieces,

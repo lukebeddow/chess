@@ -10,6 +10,37 @@
 
 #include "board_functions.h"
 
+/*
+
+So, I want to keep as much working code as possible. In particular,
+printing and utility functions, such as converting between number
+and letter moves.
+
+The old code saved every board that had been visited. The new code
+does not want to do this. Instead, it should save only a hash of
+every board that has been visited, alongside its score.
+
+Or, I can save boards but be more ruthless about clearing the
+memory afterwards.
+
+The critical thing I want to do is move to a depth first search.
+So we check a line to depth 10, and save the score of the best
+move. Then we work backwards along other branches, pruning if
+they drop below either the final (or maybe intermediate) scores.
+
+For each line, we do not want to re-evaluate each board. We want
+to roll one move back, and then check the next moves in our list.
+The line itself can be defined by the sequence of moves. Then, it
+would make sense to save the evaluation, and set of candidate moves
+at each step. The tree should build recursively.
+
+Currently, my code builds up in layers. This is not necessarily bad,
+perhaps I can use the existing structure. The key is to simply
+expand less in each layer, and go up and down the structure more.
+Instead of width first, go depth first.
+
+*/
+
 struct Lookup {
     int index;
     bool present;
@@ -72,6 +103,7 @@ struct MoveEntry {
     int new_eval;
     std::size_t new_hash;
     int active_move = -1;
+    TreeKey child_key;
 
     // member functions
     Move get_move() { return move; }
@@ -98,6 +130,7 @@ struct TreeEntry {
     std::size_t hash_key;
     int eval;
     bool active;
+    bool game_continues;
 
     int active_move = -2;
 
@@ -185,9 +218,14 @@ public:
     void remove_layer();
     void set_width(int width) { width_ = width; }
     std::shared_ptr<TreeLayer> get_layer_pointer(int layer);
+    std::shared_ptr<TreeLayer> get_or_create_layer_pointer(int layer);
     TreeKey add_move(TreeKey parent_key, move_struct& move);
-    void add_board_replies(const TreeKey& parent_key, 
+    std::vector<TreeKey> add_board_replies(const TreeKey& parent_key, 
         generated_moves_struct& gen_moves);
+
+    std::vector<TreeKey> add_depth_at_key(TreeKey key);
+    void update_upstream_evaluations(std::vector<TreeKey> keys);
+
     bool grow_tree();
     void print();
     void print(int layers);
@@ -244,6 +282,7 @@ public:
     //std::hash<int[120]> hash_func_;             // board hash function
     boost::hash<int_P[120]> hash_func_;           // board hash function
     int width_;
+    int max_num_replies_added_per_board_ = 200; // when adding replies, add up to this number
     int default_cpus_;
     std::vector<TreeKey> old_ids_;
     std::vector<TreeKey> new_ids_;
@@ -267,6 +306,7 @@ public:
     int boards_checked_ = 0;
     TreeKey root_;
     bool root_wtp_;
+    Board root_board_;
     int root_outcome_;
     int active_move_;
     std::vector<std::shared_ptr<TreeLayer>> layer_pointers_;
@@ -328,6 +368,11 @@ public:
     void calibrate(Board board, bool white_to_play);
     void calculate_settings(double target_time);
     Move generate(Board board, bool white_to_play, double target_time);
+
+    // new
+    void depth_search(std::unique_ptr<LayeredTree>& tree_ptr);
+    Move generate_NEW(Board board, bool white_to_play);
+
 };
 
 class GameBoard
