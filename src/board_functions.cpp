@@ -3165,8 +3165,10 @@ bool verify_checkmate(Board& board, bool white_to_play)
     return false;
 }
 
-generated_moves_struct generate_moves(Board& board, bool white_to_play) {
-    /* This function finds the best moves to play in a given board */
+generated_moves_struct generate_moves(Board& board, bool white_to_play) 
+{
+    /* This function finds the best moves to play in a given board, and returns
+    them ordered from best to worst (depending on if its white or blacks turn) */
 
     generated_moves_struct generated_moves;
     piece_attack_defend_struct temp_pad_struct;     // for piece analysis
@@ -3176,6 +3178,7 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play) {
 
     // save the starting board
     generated_moves.base_board = board;
+    generated_moves.white_to_play = white_to_play;
 
     // first, get a list of all the total legal moves in the position
     total_legal_moves_struct tlm_struct = total_legal_moves(board, white_to_play);

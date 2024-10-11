@@ -864,8 +864,7 @@ class ChessWindow:
 
             # check whos turn it is to play
             if self.game_board.get_white_to_play() == self.white_comp:
-                # self.get_engine_move()
-                self.get_human_move()
+                self.get_engine_move()
             else:
                 self.get_human_move()
 

@@ -224,7 +224,7 @@ public:
         generated_moves_struct& gen_moves);
 
     std::vector<TreeKey> add_depth_at_key(TreeKey key);
-    void update_upstream_evaluations(std::vector<TreeKey> keys);
+    void update_upstream_evaluations();
 
     bool grow_tree();
     void print();
@@ -234,7 +234,7 @@ public:
     void print_new_ids(int max);
     bool check_game_continues();
     void advance_ids();
-    void step_forward();
+    // void step_forward();
     void cascade();
     bool next_layer();
     bool next_layer(int layer_width, int num_cpus);
@@ -257,7 +257,7 @@ public:
     std::vector<TreeKey> my_sort(std::vector<TreeKey>& vec);
     std::vector<TreeKey> remove_duplicates(std::vector<TreeKey>& vec);
     void deactivate_node(TreeKey& node);
-    MoveEntry search(int depth);
+    // MoveEntry search(int depth);
 
     bool is_active(MoveEntry& move) {
         return move.active_move == active_move_;
@@ -284,8 +284,14 @@ public:
     int width_;
     int max_num_replies_added_per_board_ = 200; // when adding replies, add up to this number
     int default_cpus_;
+
+    // likely to be depreciated
     std::vector<TreeKey> old_ids_;
     std::vector<TreeKey> new_ids_;
+
+    // new versions of above
+    std::vector<TreeKey> added_ids_; // is this needed?
+    std::vector<TreeKey> evaluated_ids_; // used for update_upstream_evaluations
 
     struct {
         int base_allowance;
@@ -336,12 +342,15 @@ public:
         std::vector<int> prune_vector;
         int target_boards;
         int target_time;
+        long allowable_time_ms;
 
         int width;
         int depth;
         int first_layer_width_multiplier;
         int prune_target;
         int num_cpus;
+
+        int eval_slack; // for pruning, in 1000ths
     } settings;
 
     // details struct
@@ -350,6 +359,18 @@ public:
         double ms_per_board;
         long total_ms;
     } details;
+
+    // analysis struct
+    struct Analysis {
+        bool white;
+        int sign;
+        int best_eval;
+        int eval_slack_added;
+        std::vector<Move> best_move_sequence;
+        int depth_evaluated;
+        int current_depth;
+        bool allowable_time_exceeded;
+    } analysis;
 
     std::chrono::time_point<std::chrono::steady_clock> start_, end_;
 
@@ -367,11 +388,13 @@ public:
     void print_responses(std::unique_ptr<LayeredTree>& tree_ptr);
     void calibrate(Board board, bool white_to_play);
     void calculate_settings(double target_time);
-    Move generate(Board board, bool white_to_play, double target_time);
+    Move generate(Board board, bool white_to_play, double target_time = -1);
 
     // new
     void depth_search(std::unique_ptr<LayeredTree>& tree_ptr);
     Move generate_NEW(Board board, bool white_to_play);
+    void recursive_search(std::unique_ptr<LayeredTree>& tree_ptr,
+        std::vector<TreeKey> best_replies);
 
 };
 
