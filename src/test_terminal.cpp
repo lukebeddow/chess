@@ -28,6 +28,12 @@ int main(int argc, char** argv)
     // initial_pos = "3qr2k/1p3rbp/2p3p1/p7/P2pBNn1/1P3n2/6P1/B1Q1RR1K b - - 1 30"; wtp = false;
     // initial_pos = "r1bqk1nr/pp1p2bp/4n3/2p1Npp1/5P2/2N1P1PP/PPP5/1RBQKB1R w Kkq - 0 10"; wtp = true;
 
+    // position with obvious capture
+    initial_pos = "r3r1k1/p1p3b1/2p4p/2q1P3/2P2pb1/1P3N2/P1QN2P1/3RR2K b"; wtp = false;
+
+    // // endgame position
+    // initial_pos = "8/3N4/7p/1k4p1/2n3P1/8/5P1P/6K1 b - g3"; wtp = false;
+
     // set a specific board state?
     // print the starting board state?
     if (initial_pos == "") {

@@ -2912,7 +2912,7 @@ void Engine::depth_search(std::unique_ptr<LayeredTree>& tree_ptr, int depth, int
         // determine the current depth we are at (from this node)
         analysis.current_depth = node.layer;
 
-        /* ----- time limits ----- */
+        /* ----- time limits and safety checks ----- */
 
         std::chrono::time_point<std::chrono::steady_clock> time_now = std::chrono::steady_clock::now();
         long current_ms =
@@ -2934,7 +2934,7 @@ void Engine::depth_search(std::unique_ptr<LayeredTree>& tree_ptr, int depth, int
                 analysis.depth_evaluated = analysis.current_depth;
             }
 
-            if (true or print_debug) {
+            if (print_debug) {
                 std::cout << "Hit the time target at depth " << analysis.current_depth
                     << ", this evaluation = " << node.evaluation
                     << ", best evaluation = " << analysis.best_eval << "\n";
@@ -2942,44 +2942,12 @@ void Engine::depth_search(std::unique_ptr<LayeredTree>& tree_ptr, int depth, int
 
             break; // exit the depth search loop
         }
-
-        /* ----- depth limits ----- */
-
-        if (analysis.current_depth > settings.depth) {
-            throw std::runtime_error("current depth deeper than settings.depth allows");
+        else {
+            analysis.allowable_time_exceeded = false;
         }
-        // check if we have hit our depth limit, then perform evaluation analysis
-        else if (analysis.current_depth == settings.depth) {
 
-            throw std::runtime_error("this code should not be reached in depth_search()");
-
-            // first cascade the evaluations all the way up (from the parent/s)
-            std::vector<TreeKey> node_parents = tree_ptr->layer_pointers_[node.layer]
-                                                    ->board_list[node.entry].parent_keys;
-            int best_eval = tree_ptr->update_upstream_evaluations(node_parents);
-            // int best_eval =  tree_ptr->update_upstream_evaluations(node);
-
-            // // now get the best evaluation at the root
-            // std::vector<MoveEntry> best_moves = tree_ptr->get_best_moves();
-            // int best_eval = best_moves[0].new_eval;
-
-            // int best_eval = node.evaluation;
-
-            if (best_eval * analysis.sign > analysis.best_eval * analysis.sign) {
-                // the new evaluation is better
-                analysis.best_eval = best_eval;
-                analysis.best_move_sequence = tree_ptr->layer_pointers_[node.layer]
-                                                ->board_list[node.entry].parent_moves;
-                analysis.depth_evaluated = analysis.current_depth;
-            }
-
-            if (print_debug)  {
-                std::cout << "Hit target depth at " << analysis.current_depth
-                    << ", this evaluation = " << node.evaluation
-                    << ", best evaluation = " << analysis.best_eval << "\n";
-            }
-
-            continue; // do not grow the tree any deeper from this node
+        if (analysis.current_depth >= settings.depth) {
+            throw std::runtime_error("current depth deeper than settings.depth allows");
         }
 
         /* ----- branch pruning ----- */ 
@@ -3014,7 +2982,12 @@ void Engine::depth_search(std::unique_ptr<LayeredTree>& tree_ptr, int depth, int
                 if (print_debug) {
                     std::cout << "Prune at depth " << analysis.current_depth
                         << ", this evaluation = " << node.evaluation
-                        << ", best evaluation = " << analysis.best_eval << "\n";  
+                        << ", best evaluation = " << analysis.best_eval 
+                        << ", eval slack = " << settings.eval_slack
+                        << ", node.eval*sign = " << node.evaluation * analysis.sign
+                        << " < best_eval*sign - slack = "
+                        << analysis.best_eval * analysis.sign - settings.eval_slack
+                        << "\n";  
                 }   
                 continue; // do not grow the tree from this node
             }
@@ -3039,37 +3012,32 @@ void Engine::depth_search(std::unique_ptr<LayeredTree>& tree_ptr, int depth, int
         // check if these new entries have reached the maximum depth
         if (reply_keys[0].layer >= depth) {
 
-            // first cascade the evaluations all the way up (from the parent/s)
-            // std::vector<TreeKey> node_parents = tree_ptr->layer_pointers_[node.layer]
-            //                                         ->board_list[node.entry].parent_keys;
-            // int best_eval = tree_ptr->update_upstream_evaluations(node_parents);
+            // update what is our new best evaluation
+            analysis.best_eval =  tree_ptr->update_upstream_evaluations(node);
 
-            // update evaluations upstream of this leaf node
-            int best_eval =  tree_ptr->update_upstream_evaluations(node);
+            // // update evaluations upstream of this leaf node
+            // int best_eval =  tree_ptr->update_upstream_evaluations(node);
 
-            // determine if this line has improved the best evaluation
-            if (best_eval * analysis.sign > analysis.best_eval * analysis.sign) {
+            // // determine if this line has improved the best evaluation
+            // if (best_eval * analysis.sign > analysis.best_eval * analysis.sign) {
 
-                // the new evaluation is better
-                analysis.best_eval = best_eval;
-                analysis.best_move_sequence = tree_ptr->layer_pointers_[node.layer]
-                                                ->board_list[node.entry].parent_moves;
-                // analysis.best_move_sequence.push_back(tree_ptr->layer_pointers_[reply_keys[0].layer]
-                //                                         ->board_list[reply_keys[0].entry].);
-                analysis.depth_evaluated = reply_keys[0].layer;
-            }
+            //     // the new evaluation is better
+            //     analysis.best_eval = best_eval;
+            //     analysis.best_move_sequence = tree_ptr->layer_pointers_[node.layer]
+            //                                     ->board_list[node.entry].parent_moves;
+            //     analysis.depth_evaluated = reply_keys[0].layer;
+            // }
 
-            // do not go any deeper from this node
-            continue;
+            continue; // do not go any deeper from this node
         }
 
-        // add these replies to the stack, up to the maximum width
-
-        // add the first 'width' entries, but add them in reverse order
+        // prepare to add these replies to the stack, up to the maximum width
         int num_keys_to_add = width;
         if (reply_keys.size() < num_keys_to_add) {
             num_keys_to_add = reply_keys.size();
         }
+
+        // add the first 'width' entries, but add them in reverse order
         for (int i = 0; i < num_keys_to_add; i++) {
             int ind = num_keys_to_add - 1 - i;
             key_stack.push(reply_keys[ind]);
@@ -3078,11 +3046,8 @@ void Engine::depth_search(std::unique_ptr<LayeredTree>& tree_ptr, int depth, int
         /* ----- end of loop ----- */
     }
 
-    // // now recursively search deeper into the tree
-    // recursive_search(tree_ptr, first_replies);
-
     // // once everything is finished, update any remaining evalutions
-    // tree_ptr->update_upstream_evaluations(); // updates every single position from the search
+    // tree_ptr->update_upstream_evaluations();
 }
 
 Move Engine::generate(Board board, bool white_to_play, double target_time)
@@ -3143,14 +3108,16 @@ Move Engine::generate(Board board, bool white_to_play, double target_time)
 
     bool game_continues;
 
-    std::vector<int> depth_vector {3, 5, 8};
-    std::vector<int> width_vector {20, 10, 5};
+    std::vector<int> depth_vector {2, 4, 6, 8};
+    std::vector<int> width_vector {30, 15, 10, 5};
+    std::vector<int> prune_slack_vector {10000, 1000, 500, 250};
 
     // std::vector<int> depth_vector {8};
     // std::vector<int> width_vector {10};
 
     // depth search with iterative deepening
     for (int i = 0; i < depth_vector.size(); i++) {
+        settings.eval_slack = prune_slack_vector[i];
         depth_search(tree_ptr, depth_vector[i], width_vector[i]);
     }
 
@@ -3269,7 +3236,7 @@ void GameBoard::init(Board myboard, bool mywhite_to_play)
     // engine_pointer->calibrate(board);
 
     // set the print level to 4 (options 0-4)
-    engine_pointer->print_level = 4;
+    engine_pointer->print_level = 2;
 }
 
 bool GameBoard::move(std::string move)
