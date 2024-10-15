@@ -545,7 +545,7 @@ class ChessWindow:
         if self.timed_game:
             target_time = 5
         else:
-            target_time = -1
+            target_time = 10 # don't want it to take too long
 
         self.engine_thread_running = True
         engine_move = self.game_board.get_engine_move(target_time)

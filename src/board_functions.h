@@ -189,8 +189,9 @@ constexpr int BLACK_MATED = 100100;
     void py_print_board(Board& board);
 #endif
 
-Board create_board();
+Board create_board(bool pieces = true);
 Board create_board(std::vector<std::string> moves);
+Board FEN_to_board(std::string fen);
 bool check_board(Board& board);
 void print_board(Board& board);
 void print_board(Board& board, bool tidy);

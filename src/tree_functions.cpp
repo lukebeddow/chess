@@ -146,8 +146,6 @@ void MoveEntry::print(std::string starter)
     std::cout << starter + '\t' + "new_eval = " << new_eval << " ("
         << new_eval / 1000.0 << "), new_hash = " << new_hash
         << ", active_move = " << active_move << '\n';
-    std::cout << starter + '\t' << "Child key = ";
-    child_key.print();
 }
 
 std::string MoveEntry::print_move()
@@ -479,6 +477,8 @@ NodeEval TreeLayer::find_max_eval(int entry, int sign, int active_move, int dept
     node.max_eval = (WHITE_MATED - 1) * sign; // choose a terrible eval
 
     if (board_list.size() <= entry) {
+        std::cout << "Board_list.size() = " << board_list.size()
+            << ", entry = " << entry << "\n";
         throw std::runtime_error("entry is out of bounds for board list!");
     }
 
@@ -503,9 +503,9 @@ NodeEval TreeLayer::find_max_eval(int entry, int sign, int active_move, int dept
             print_board(board_list[entry].board_state);
             throw std::runtime_error("zero moves available but not game over");
         }
-        else {
-            print_str("Testing: confirmed checkmate board has no legal moves in find_max_eval()");
-        }
+        // else {
+        //     print_str("Testing: confirmed checkmate board has no legal moves in find_max_eval()");
+        // }
         // END TESTING
         return node;
     }
@@ -522,7 +522,7 @@ NodeEval TreeLayer::find_max_eval(int entry, int sign, int active_move, int dept
     for (int i = 0; i < board_list[entry].move_list.size(); i++) {
         
         // is the node active, if not, skip
-        if (board_list[entry].move_list[i].active_move != active_move) {
+        if (board_list[entry].move_list[i].active_move <= active_move) {
             //std::cout << "active move not equal, entry has "
             //    << board_list[entry].move_list[i].active_move
             //    << " whilst tree has " << active_move << '\n';
@@ -563,8 +563,8 @@ LayeredTree::LayeredTree()
 {
     /* Constructor*/
 
-    // if given no indication, set width = 2
-    init(2);
+    // if given no indication, set width = 5
+    init(5);
     int root_outcome_ = set_root();
 }
 
@@ -643,16 +643,18 @@ int LayeredTree::set_root(Board board, bool white_to_play)
     // add this board to the tree
     int entry_key = layer_p->add(rootBoard);
 
+    // a node is active even with zero depth initially, before searching starts
+    active_move_ = 0;
+
     // if the board is already present
     if (entry_key == -1) {
         entry_key = layer_p->find_hash(rootBoard.hash_key);
         // set the active move to align with the existing entry
-        active_move_ = layer_p->board_list[entry_key].active_move;
+        layer_p->board_list[entry_key].active_move = 0; // initially, no depth added to evaluation
     }
     else {
         // reset the active move
-        active_move_ = current_move_;
-        layer_p->board_list[entry_key].active_move = active_move_;
+        layer_p->board_list[entry_key].active_move = 0; // initially, no depth added to evaluation
     }
 
     // create the key for this board
@@ -877,7 +879,7 @@ TreeKey LayeredTree::add_move(TreeKey parent_key, move_struct& move)
     moveEntry.new_eval = move.evaluation;
     moveEntry.new_hash = board_hash;
 
-    moveEntry.active_move = active_move_; // always add active
+    moveEntry.active_move = 0; // add with evaluation to 0 depth
 
     // find out if this position is already in the current layer
     int key = layer_p->find_hash(board_hash);
@@ -894,15 +896,6 @@ TreeKey LayeredTree::add_move(TreeKey parent_key, move_struct& move)
                 // nothing to add, this entry is already done
                 new_key.entry = key;
                 new_key.evaluation = layer_p->board_list[key].eval;
-                // the parent should already have this key as the child
-                if ((prev_layer_p->board_list[parent_key.entry]
-                      .move_list[parent_key.move_index]
-                      .child_key.entry != new_key.entry) and
-                     (prev_layer_p->board_list[parent_key.entry]
-                      .move_list[parent_key.move_index]
-                      .child_key.layer != new_key.layer)) {
-                    throw std::runtime_error("Existing parent key does not have this existing board state as its child");
-                }
                 return new_key;
             }
         }
@@ -918,15 +911,14 @@ TreeKey LayeredTree::add_move(TreeKey parent_key, move_struct& move)
         new_key.entry = key;
         new_key.evaluation = layer_p->board_list[key].eval;
 
-        // add this board key as a child of the new parent
-        prev_layer_p->board_list[parent_key.entry]
-            .move_list[parent_key.move_index]
-            .child_key = new_key;
 
         return new_key;
     }
 
     // add the move to the board list of the parent, store its position in parent key
+    if (prev_layer_p->board_list.size() <= parent_key.entry) {
+        throw std::runtime_error("board list smaller than parent key.entry");
+    }
     prev_layer_p->board_list[parent_key.entry].move_list.push_back(moveEntry);
     parent_key.move_index = prev_layer_p->board_list[parent_key.entry]
         .move_list.size() - 1;
@@ -945,7 +937,7 @@ TreeKey LayeredTree::add_move(TreeKey parent_key, move_struct& move)
     treeEntry.parent_moves.push_back(moveEntry.move);
 
     // the new layer is not included in cascade, so +1
-    treeEntry.active_move = active_move_ + 1;
+    treeEntry.active_move = 0; // add with evaluation to zero depth
 
     // add this new entry to the layer
     int generated_key = layer_p->add(treeEntry);
@@ -957,10 +949,6 @@ TreeKey LayeredTree::add_move(TreeKey parent_key, move_struct& move)
     new_key.entry = generated_key;
     new_key.evaluation = move.evaluation;
 
-    // add this new board key as a child of the parent
-    prev_layer_p->board_list[parent_key.entry]
-        .move_list[parent_key.move_index]
-        .child_key = new_key;
 
     return new_key;
 }
@@ -1000,7 +988,7 @@ std::vector<TreeKey> LayeredTree::add_board_replies(const TreeKey& parent_key,
 
     // how many moves are available
     int num_loops = 0;
-    int width = max_num_replies_added_per_board_;
+    int width = width_;
     if (gen_moves.moves.size() > width) {
         num_loops = width;
     }
@@ -1017,7 +1005,8 @@ std::vector<TreeKey> LayeredTree::add_board_replies(const TreeKey& parent_key,
     }
 
     // loop through the best generated moves to set width
-    std::cout << "Generated move evals, white to play = " << gen_moves.white_to_play << ": ";
+    bool print_evals = false; // for testing
+    if (print_evals) std::cout << "Generated move evals, white to play = " << gen_moves.white_to_play << ": ";
     for (int i = 0; i < num_loops; i++) {
 
         // add the moves to the tree
@@ -1028,9 +1017,9 @@ std::vector<TreeKey> LayeredTree::add_board_replies(const TreeKey& parent_key,
 
         reply_keys[i] = new_key;
 
-        std::cout << new_key.evaluation << "; ";
+        if (print_evals) std::cout << new_key.evaluation << " (layer = " << new_key.layer << ")" << "; ";
     }
-    std::cout << "\n";
+    if (print_evals) std::cout << "\n";
 
     // for cutoff prune
     new_ids_groups_.push_back(num_loops);
@@ -1889,7 +1878,7 @@ std::vector<MoveEntry> LayeredTree::get_dead_moves(TreeKey node)
         // index
         int j = start + (i * direction);
         // if the move is active, ignore it, we want dead moves only
-        if (copy_moves[j].active_move != active_move_ - 1) {
+        if (copy_moves[j].active_move < active_move_) {
             output_moves.push_back(copy_moves[j]);
             printed += 1;
             if (printed == limit) {
@@ -1939,8 +1928,8 @@ std::vector<MoveEntry> LayeredTree::get_best_moves(TreeKey node)
     for (int i = 0; i < copy_moves.size(); i++) {
         // index
         int j = start + (i * direction);
-        // if the move is active (move_list moves are always -1)
-        if (copy_moves[j].active_move == active_move_ - 1) {
+        // new comment: fine if evaluated to or deeper than the 'active_move_' depth
+        if (copy_moves[j].active_move >= active_move_) {
             output_moves.push_back(copy_moves[j]);
             printed += 1;
             if (printed == limit) {
@@ -1995,7 +1984,8 @@ void LayeredTree::print_best_moves(TreeKey node, bool dead_nodes)
     print_str("The best moves are:");
     for (int i = 0; i < best_moves.size(); i++) {
         std::string to_print = "\t" + best_moves[i].print_move() + " with eval " 
-            + best_moves[i].print_eval();
+            + best_moves[i].print_eval() + "\t(Evaluated to depth "
+            + std::to_string(best_moves[i].active_move) + ")";
         print_str(to_print);
     }
 
@@ -2004,7 +1994,8 @@ void LayeredTree::print_best_moves(TreeKey node, bool dead_nodes)
         std::vector<MoveEntry> dead_moves = get_dead_moves(node);
         for (int i = 0; i < dead_moves.size(); i++) {
             std::string to_print = "\t" + dead_moves[i].print_move() + " with eval " 
-                + dead_moves[i].print_eval() + "\t(dead node)";
+                + dead_moves[i].print_eval() +  + "\t(Ignored, evaluated to depth "
+            + std::to_string(dead_moves[i].active_move) + ")";
             print_str(to_print);
         }
     }
@@ -2022,45 +2013,6 @@ void LayeredTree::print_node_board(TreeKey node)
     std::shared_ptr<TreeLayer> layer_p = get_layer_pointer(node.layer);
     print_board(layer_p->board_list[node.entry].board_state);
 }
-
-// void LayeredTree::step_forward()
-// {
-//     /* This function steps forward in the tree */
-
-//     if (not check_game_continues()) {
-//         std::cout << "Cannot step forward, game is over\n";
-//         return;
-//     }
-
-//     advance_ids();
-
-//     bool game_continues = grow_tree();
-
-//     if (not game_continues) {
-//         std::cout << "Failed to grow tree any more, depth search is over\n";
-//         return;
-//     }
-
-//     // update cascade
-//     cascade();
-
-//     // prune
-//     std::cout << "The length of new_ids_ before pruning: " << new_ids_.size() << '\n';
-//     int depth = new_ids_[0].layer - current_move_;
-//     //limit_prune();
-
-//     if (new_ids_.size() > 1000) {
-//         target_prune(1000);
-//     }
-//     else {
-//         new_ids_ = cutoff_prune();
-//     }
-
-//     //cutoff_prune();
-//     std::cout << "The length of new_ids_ after pruning: " << new_ids_.size() << '\n';
-
-//     print_best_moves();
-// }
 
 bool LayeredTree::next_layer(int layer_width, int num_cpus)
 {
@@ -2091,20 +2043,6 @@ bool LayeredTree::next_layer()
     return true;
 }
 
-// // I think this function is NOT used, and neither is step_forward(), in the current code
-// MoveEntry LayeredTree::search(int depth)
-// {
-//     /* search for the best move */
-
-//     for (int d = 0; d < depth; d++) {
-//         step_forward();
-//     }
-
-//     std::vector<MoveEntry> best_moves = get_best_moves();
-
-//     return best_moves[0];
-// }
-
 bool LayeredTree::test_dictionary()
 {
     std::shared_ptr<TreeLayer> layer_p = get_layer_pointer(1);
@@ -2129,9 +2067,6 @@ std::vector<TreeKey> LayeredTree::add_depth_at_key(TreeKey key)
     /* generate a set of move replies at a given key (board state), and then add them into the tree */
 
     // get layer pointer for this key and the next layer (for the replies)
-    if (key.layer > layer_pointers_.size()) {
-        key.print();
-    }
     std::shared_ptr<TreeLayer> key_layer_p = get_layer_pointer(key.layer);
     std::shared_ptr<TreeLayer> next_layer_p = get_or_create_layer_pointer(key.layer + 1); // may grow the tree
 
@@ -2142,7 +2077,9 @@ std::vector<TreeKey> LayeredTree::add_depth_at_key(TreeKey key)
     // now generate and evaluate all possible replies on this board
     generated_moves_struct gen_moves = generate_moves(board, white_to_play);
 
-    // add replies into next layer of tree (up to limit = max_num_replies_added_per_board_)
+    // std::cout << "After generate moves\n" << std::flush;
+
+    // add replies into next layer of tree (up to limit = width_)
     std::vector<TreeKey> reply_keys = add_board_replies(key, gen_moves);
     boards_checked_ += 1;
 
@@ -2151,25 +2088,78 @@ std::vector<TreeKey> LayeredTree::add_depth_at_key(TreeKey key)
     return reply_keys;
 }
 
-void LayeredTree::update_upstream_evaluations()
+int LayeredTree::update_upstream_evaluations()
 {
-    /* traverse the tree from a selection of keys */
+    /* overload allowing function to be called without inputs */
 
-    std::vector<TreeKey> id_list = evaluated_ids_; //added_ids_; //old_ids_;
+    // inputs any new board positions which have been evaluated but not updated
+    int best_eval = update_upstream_evaluations(evaluated_ids_);
+
+    // wipe the above vector, which have now been updated
+    std::vector<TreeKey>().swap(evaluated_ids_);
+
+    return best_eval;
+}
+
+int LayeredTree::update_upstream_evaluations(TreeKey node)
+{
+    /* overload allowing function to be called with a single node only */
+
+    std::vector<TreeKey> node_in_vec(1, node);
+    return update_upstream_evaluations(node_in_vec);
+}
+
+int LayeredTree::update_upstream_evaluations(std::vector<TreeKey> id_list)
+{
+    /* traverse the tree from a selection of keys. Returns the best evaluation
+    at the root node */
+
+    // std::vector<TreeKey> id_list = evaluated_ids_; //added_ids_; //old_ids_;
     std::vector<TreeKey> next_id_list;
 
     if (id_list.size() == 0) {
         std::cout << "update_upstream_evaluations() warning: id_list.size() == 0\n";
-        return;
+        // get the best evaluation at the root anyway
+        std::vector<MoveEntry> best_moves = get_best_moves();
+        if (best_moves.size() == 0) {
+            throw std::runtime_error("update_upstream_evaluations() error: id_list.size() == 0 and root has no best moves");
+        }
+        int best_eval = best_moves[0].new_eval;
+        return best_eval;
+    }
+
+    int num_layers = id_list[0].layer;
+    std::vector<int> evals_layerwise(num_layers);
+
+    if (num_layers > layer_pointers_.size() - 1) {
+        std::cout << "node.layer = " << num_layers << ", layer_pointers_.size() - 1 = "
+            << layer_pointers_.size() - 1 << "\n";
+        throw std::runtime_error("LayeredTree::update_single_upstream_evaluations() error: node.layer exceeds number of layers");
     }
 
     std::shared_ptr<TreeLayer> this_layer_p;
     std::shared_ptr<TreeLayer> next_layer_p;
+    int best_root_evaluation = 123456789;
 
     // we cascade through all layers except the very bottom, which is unfinished
-    int depth = layer_pointers_.size() - 2;
+    // int depth = layer_pointers_.size() - 2;
+    int depth = num_layers;
+    int depth_evaluated_to = num_layers + 1; // we update from parents of leaf nodes
 
-    std::cout << "Cascade depth is " << depth << "\n";
+    // testing: active move is deepest depth
+    active_move_ = depth_evaluated_to;
+
+    bool print_cascade = false; // for testing
+    if (print_cascade) {
+        std::cout << "Cascade depth is " << depth << ", depth evaluated to is "
+            << depth_evaluated_to
+            << ", initial length of id_list = " << id_list.size()
+            << ". First element is:\n";
+        for (int i = 0; i < 1; i++) {
+            id_list[i].print();
+        }
+        std::cout << std::flush;
+    }
 
     // loop backwards through the layers
     for (int k = 0; k <= depth; k++) {
@@ -2190,46 +2180,59 @@ void LayeredTree::update_upstream_evaluations()
             next_layer_p = get_layer_pointer(layer - 1);
         }
 
+        // are the below two needed?? Check this
         // add checkmate and drawn game nodes to the list
         this_layer_p->add_finished_games(id_list);
-
         // remove duplicates from the list
         id_list = this_layer_p->remove_duplicates(id_list);
 
         // for testing only
-        std::cout << "Update evaluations, length of id_list = " << id_list.size()
-            << ", k = " << k << "; " << std::flush;
-        int test_ind = 0;
+        if (print_cascade) {
+            std::cout << "Update evaluations, length of id_list = " << id_list.size()
+                << ", k = " << k << "; " << std::flush;
+        }
+        int test_ind = 0; // also for above testing
 
         // loop through the id items
         for (TreeKey& id_item : id_list) {
 
-            std::cout << test_ind << " " << std::flush;
-            test_ind += 1;
+            if (print_cascade) {
+                std::cout << test_ind << " " << std::flush;
+                test_ind += 1;
+            }
+
+            // // check that all ids have the same layer
+            // if (k == 0) {
+            //     if (id_item.layer != num_layers) {
+            //         std::cout << "id_item.layer = " << id_item.layer 
+            //             << ", num layers expected = " << num_layers << "\n";
+            //         throw std::runtime_error("id_list does not have all the same layers");
+            //     }
+            // }
 
             // if this id is in a downstream layer, skip it until we reach that layer
             if (id_item.layer != offset) {
-                std::cout << "id_item is in a higher layer. This offset = " << offset
+                std::cout << "Ignorning!! id_item in a higher layer. This offset = " << offset
                     << ", this id_item = ";
                 id_item.print();
-                next_id_list.push_back(id_item);
+
+                // // TESTING IGNORE HIGHER LAYERS SINCE THEIR EVALUATIONS DON'T REACH THE REQUIRED DEPTH
+                // next_id_list.push_back(id_item);
+
                 continue;
             }
 
+            // set this node as active
+            this_layer_p->board_list[id_item.entry].active_move = depth_evaluated_to;
+
             // find the best evaluation at this node
             NodeEval node = this_layer_p->find_max_eval(id_item.entry, sign, 
-                active_move_, offset);
+                depth_evaluated_to, offset);
 
             if (not node.active) {
-                //// TESTING
-                //// set the parents move not active as well, override shared parents
-                //for (const TreeKey& parent : this_layer_p->
-                //    board_list[id_item.entry].parent_keys) {
-                //    
-                //    next_layer_p->board_list[parent.entry].move_list[parent.move_index]
-                //        .active_move = -8;
-                //}
-                //// END TESTING
+                id_item.print();
+                std::cout << "depth = " << depth << "\n";
+                throw std::runtime_error("update_upstream_evaluations() error: node not active, but I have just set it active");
                 continue;
             }
 
@@ -2238,15 +2241,12 @@ void LayeredTree::update_upstream_evaluations()
             // overwrite the evaluation of this node
             this_layer_p->board_list[id_item.entry].eval = node.max_eval;
 
-            // keep the node active
-            // this_layer_p->board_list[id_item.entry].active_move += 1; // old
-            this_layer_p->board_list[id_item.entry].active_move = active_move_;
-
             // end here if on the final loop
             if (offset == 0) {
                 if (id_list.size() != 1) {
                     throw std::runtime_error("id_list not == 1 on final cascade");
                 }
+                best_root_evaluation = node.max_eval;
                 break;
             }
 
@@ -2261,7 +2261,7 @@ void LayeredTree::update_upstream_evaluations()
                 // next_layer_p->board_list[parent.entry].move_list[parent.move_index]
                 //     .active_move += 1; // old
                 next_layer_p->board_list[parent.entry].move_list[parent.move_index]
-                    .active_move = active_move_;
+                    .active_move = depth_evaluated_to;
 
                 // add the parent to the next id list
                 next_id_list.push_back(parent);
@@ -2276,12 +2276,12 @@ void LayeredTree::update_upstream_evaluations()
         // loop to next layer up
     }
 
-    // now we have finished, increment the active move
-    active_move_ += 1;
 
     // wipe the list of ids which we have now finished updating upstream of
     std::vector<TreeKey>().swap(added_ids_); // these are not used in this function
-    std::vector<TreeKey>().swap(evaluated_ids_);
+    // std::vector<TreeKey>().swap(evaluated_ids_); // comment this when using vector function input instead
+
+    return best_root_evaluation;
 }
 
 TreeKey LayeredTree::find_hash(std::size_t hash, int layer)
@@ -2344,7 +2344,7 @@ Engine::Engine()
     
     // new
     settings.eval_slack = 300; // this is 0.3 pawns
-    settings.allowable_time_ms = 180000; // 3 mins
+    settings.allowable_time_ms = 5000; // 5 seconds, default
 
     details.ms_per_board = -1; // to indicate not set
     
@@ -2389,8 +2389,8 @@ void Engine::print_startup(std::unique_ptr<LayeredTree>& tree_ptr)
     }
 
     if (print_level > 2) {
-        print_vector(settings.width_vector, "\tThe width vector");
-        print_vector(settings.prune_vector, "\tThe prune vector");
+        // print_vector(settings.width_vector, "\tThe width vector");
+        // print_vector(settings.prune_vector, "\tThe prune vector");
         if (settings.target_time < 0) {
             print_str("No target time or target boards");
         }
@@ -2523,7 +2523,9 @@ void Engine::calculate_settings(double target_time)
 
     settings.width_vector.clear();
     settings.prune_vector.clear();
-    settings.target_time = target_time;   
+    settings.target_time = target_time;
+    settings.allowable_time_ms = int(target_time * 1e3);
+    std::cout << "The target time in seconds is " << settings.target_time << "\n";
 
     // if we do not have a set target time (negative value)
     if (target_time < 0 or details.ms_per_board < 0) {
@@ -2534,6 +2536,9 @@ void Engine::calculate_settings(double target_time)
         settings.target_boards = -1;
         return;
     }
+
+    // for testing
+    return;
 
     // how many boards do we have time to search
     std::cout << "target time is: " << target_time <<
@@ -2704,11 +2709,11 @@ void Engine::recursive_search(std::unique_ptr<LayeredTree>& tree_ptr,
     // this is what we think is the 'best' so far on this line (ie the best reply)
     TreeKey node = best_replies[0];
 
-    analysis.current_depth = best_replies[0].layer - 1;
+    analysis.current_depth = best_replies[0].layer;
 
     std::cout << "Entered the recursive_search() function, layer pointer size = "
         << tree_ptr->layer_pointers_.size()
-        << ", current layer = " << best_replies[0].layer << "\n";
+        << ", current layer (and current depth) = " << best_replies[0].layer << "\n";
 
     // check that we do not exceed the time limit
     if (analysis.allowable_time_exceeded) {
@@ -2750,6 +2755,9 @@ void Engine::recursive_search(std::unique_ptr<LayeredTree>& tree_ptr,
         // we have hit our depth limit, check if the current evaluation is better
 
         // first cascade the evaluations all the way up
+        if (tree_ptr->evaluated_ids_.size() == 0) {
+            tree_ptr->evaluated_ids_.push_back(node);
+        }
         tree_ptr->update_upstream_evaluations();
 
         // now get the best evaluation at the root
@@ -2771,6 +2779,29 @@ void Engine::recursive_search(std::unique_ptr<LayeredTree>& tree_ptr,
         return;
     }
 
+    /* ----- pruning ----- */
+
+    // // if it is our move 
+    // if (analysis.current_depth % 2 == 0) {
+    //     if (node.evaluation * analysis.sign < 
+    //         analysis.best_eval * analysis.sign - settings.eval_slack) {
+    //         std::cout << "Prune our move at depth " << analysis.current_depth
+    //         << ", this evaluation = " << node.evaluation
+    //         << ", best evaluation = " << analysis.best_eval << "\n";     
+    //         return;
+    //     }
+    // }
+    // // it is their move
+    // else {
+    //     if (node.evaluation * analysis.sign * -1 < 
+    //         analysis.best_eval * analysis.sign * -1 - settings.eval_slack) {
+    //         std::cout << "Prune their move at depth " << analysis.current_depth
+    //         << ", this evaluation = " << node.evaluation
+    //         << ", their best evaluation = " << analysis.their_best_eval << "\n";     
+    //         return;
+    //     }
+    // }
+
     // check if the evaluation of this line has dropped, and must be pruned
     if (node.evaluation * analysis.sign < 
             analysis.best_eval * analysis.sign - settings.eval_slack) {
@@ -2791,10 +2822,26 @@ void Engine::recursive_search(std::unique_ptr<LayeredTree>& tree_ptr,
     // for the set width, determine the subsequent best responses to these best replies
     for (int i = 0; i < settings.width; i++) {
 
+        std::cout << "Layer to add depth to is " << best_replies[i].layer
+            << ", recursive_search() i = " << i << "\n";
+        for (int j = 0; j < best_replies.size(); j++) {
+            best_replies[j].print();
+        }
+
         std::vector<TreeKey> reply_keys = tree_ptr->add_depth_at_key(best_replies[i]);
 
         // now recursively call this function to progress each to the next depth
         recursive_search(tree_ptr, reply_keys);
+
+        /* ----- updating best evaluations ----- */
+
+        // if it is our move at this depth
+        if (analysis.current_depth % 2 == 0) {
+
+        }
+        else { // their move
+        
+        }
 
         // check if we are out of time
         if (analysis.allowable_time_exceeded) {
@@ -2802,15 +2849,36 @@ void Engine::recursive_search(std::unique_ptr<LayeredTree>& tree_ptr,
         }
     }
 
+    std::cout << "Retreating to previous depth of " << analysis.current_depth - 1 << "\n";
+
     return; // finished the whole width, recursion may continue
 }
 
 void Engine::depth_search(std::unique_ptr<LayeredTree>& tree_ptr)
 {
-    /* do a depth first search of the board */
+    /* run the depth search with default depth and width */
 
-    print_str("Entered the depth_search() function");
+    depth_search(tree_ptr, settings.depth, settings.width);
+}
 
+void Engine::depth_search(std::unique_ptr<LayeredTree>& tree_ptr, int depth, int width)
+{
+    /* do a depth first search of the board. Depth and width should be set */
+    
+    print_str("Entered the depth_search() function: depth = "
+        + std::to_string(depth) + ", width = " + std::to_string(width));
+
+    if (analysis.allowable_time_exceeded) {
+        print_str("Allowable time exceeded, cancelling any further depth search");
+        return;
+    }
+
+    // set the width in the tree
+    tree_ptr->width_ = width;
+    settings.width = width;
+    settings.depth = depth;
+
+    // how to handle printing during search?
     // print_layer(tree_ptr, 0);
 
     // determine if the game continues
@@ -2818,157 +2886,285 @@ void Engine::depth_search(std::unique_ptr<LayeredTree>& tree_ptr)
 
     if (not game_continues) {
         print_str("Engine::depth_search() found game_continues=false in initial board");
+        return;
     }
+
+    // this function uses a stack to manage the tree search
+    std::stack<TreeKey> key_stack;
 
     // what move are we starting on
     int first_layer_move = 1; // first move
 
-    std::vector<TreeKey> first_replies = tree_ptr->add_depth_at_key(tree_ptr->root_);
-    tree_ptr->update_upstream_evaluations();
-    print_str("Finished checking the root board");
+    // add the root position as the first element in the stack
+    key_stack.push(tree_ptr->root_);
 
-    analysis.current_depth = 1; // we have examined one move ahead
+    bool print_debug = false;
 
-    // now recursively search deeper into the tree
-    recursive_search(tree_ptr, first_replies);
+    // continue to work the stack
+    while (not key_stack.empty()) {
 
-    // once everything is finished, update all evalutions
-    tree_ptr->update_upstream_evaluations();
-    
-    // // get the best five boards which reply to the root
-    // std::vector<MoveEntry> best_replies = tree_ptr->get_best_moves(tree_ptr->root_);
+        if (print_debug) std::cout << "Stack size = " << key_stack.size() << "\n";
 
-    // // for the set width, determine the best replies to these best replies
-    // for (int i = 0; i < settings.width_per_board; i++) {
+        // get the next destination node
+        TreeKey node = key_stack.top();
+        key_stack.pop(); // delete this entry after getting its data
 
-    //     TreeKey this_key = best_replies[i].child_key;
-    //     std::vector<TreeKey> reply_keys = tree_ptr->add_depth_at_key(this_key);
-    // }
+        // determine the current depth we are at (from this node)
+        analysis.current_depth = node.layer;
 
-    // tree_ptr->update_upstream_evaluations();
+        /* ----- time limits ----- */
 
-    // // debugging, print info of new layer
-    // (tree_ptr->get_layer_pointer(0))->print();
-    // (tree_ptr->get_layer_pointer(1))->print();
-    // (tree_ptr->get_layer_pointer(2))->print();
+        std::chrono::time_point<std::chrono::steady_clock> time_now = std::chrono::steady_clock::now();
+        long current_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(time_now - start_).count();
+        if (current_ms > settings.allowable_time_ms) {
+            analysis.allowable_time_exceeded = true;
 
-    // tree_ptr->print();
+            // update the evaluations from the parent (from this node causes an error)
+            std::vector<TreeKey> node_parents = tree_ptr->layer_pointers_[node.layer]
+                                                    ->board_list[node.entry].parent_keys;
+            int best_eval = tree_ptr->update_upstream_evaluations(node_parents);
 
-    // end of search
+            // check if this line is our best evaluation
+            if (best_eval * analysis.sign > analysis.best_eval * analysis.sign) {
+                // the new evaluation is better
+                analysis.best_eval = best_eval;
+                analysis.best_move_sequence = tree_ptr->layer_pointers_[node.layer]
+                                                ->board_list[node.entry].parent_moves;
+                analysis.depth_evaluated = analysis.current_depth;
+            }
+
+            if (true or print_debug) {
+                std::cout << "Hit the time target at depth " << analysis.current_depth
+                    << ", this evaluation = " << node.evaluation
+                    << ", best evaluation = " << analysis.best_eval << "\n";
+            }
+
+            break; // exit the depth search loop
+        }
+
+        /* ----- depth limits ----- */
+
+        if (analysis.current_depth > settings.depth) {
+            throw std::runtime_error("current depth deeper than settings.depth allows");
+        }
+        // check if we have hit our depth limit, then perform evaluation analysis
+        else if (analysis.current_depth == settings.depth) {
+
+            throw std::runtime_error("this code should not be reached in depth_search()");
+
+            // first cascade the evaluations all the way up (from the parent/s)
+            std::vector<TreeKey> node_parents = tree_ptr->layer_pointers_[node.layer]
+                                                    ->board_list[node.entry].parent_keys;
+            int best_eval = tree_ptr->update_upstream_evaluations(node_parents);
+            // int best_eval =  tree_ptr->update_upstream_evaluations(node);
+
+            // // now get the best evaluation at the root
+            // std::vector<MoveEntry> best_moves = tree_ptr->get_best_moves();
+            // int best_eval = best_moves[0].new_eval;
+
+            // int best_eval = node.evaluation;
+
+            if (best_eval * analysis.sign > analysis.best_eval * analysis.sign) {
+                // the new evaluation is better
+                analysis.best_eval = best_eval;
+                analysis.best_move_sequence = tree_ptr->layer_pointers_[node.layer]
+                                                ->board_list[node.entry].parent_moves;
+                analysis.depth_evaluated = analysis.current_depth;
+            }
+
+            if (print_debug)  {
+                std::cout << "Hit target depth at " << analysis.current_depth
+                    << ", this evaluation = " << node.evaluation
+                    << ", best evaluation = " << analysis.best_eval << "\n";
+            }
+
+            continue; // do not grow the tree any deeper from this node
+        }
+
+        /* ----- branch pruning ----- */ 
+
+        // can I use 'best_moves' at the current node? with 'active move' set to current depth?
+        if (false) { // new idea, not tested or finished yet
+            if (analysis.current_depth % 2 == 0) { // if it is our move
+                if (node.evaluation * analysis.sign < 
+                    analysis.best_eval * analysis.sign - settings.eval_slack) {
+                    std::cout << "Prune our move at depth " << analysis.current_depth
+                    << ", this evaluation = " << node.evaluation
+                    << ", best evaluation = " << analysis.best_eval << "\n";     
+                    continue; // do not grow the tree from this node
+                }
+            }
+            // it is their move
+            else {
+                if (node.evaluation * analysis.sign * -1 < 
+                    analysis.best_eval * analysis.sign * -1 - settings.eval_slack) {
+                    std::cout << "Prune their move at depth " << analysis.current_depth
+                    << ", this evaluation = " << node.evaluation
+                    << ", their best evaluation = " << analysis.their_best_eval << "\n";     
+                    continue; // do not grow the tree from this node
+                }
+            }
+        }
+        else { // old method, reasonably reliable first go
+            // check if the evaluation of this line has dropped, and must be pruned
+            if (node.evaluation * analysis.sign < 
+                    analysis.best_eval * analysis.sign - settings.eval_slack) {
+
+                if (print_debug) {
+                    std::cout << "Prune at depth " << analysis.current_depth
+                        << ", this evaluation = " << node.evaluation
+                        << ", best evaluation = " << analysis.best_eval << "\n";  
+                }   
+                continue; // do not grow the tree from this node
+            }
+        }
+
+        /* ----- tree expansion ----- */
+
+        // generate the best replies to the state at the current node
+        if (print_debug) {
+            std::cout << "Layer is " << node.layer << "\n" << std::flush;
+            node.print(); std::cout << std::flush;
+        }
+        std::vector<TreeKey> reply_keys = tree_ptr->add_depth_at_key(node);
+
+        // check if this is a termination
+        if (reply_keys.size() == 0) {
+            //...
+            // throw std::runtime_error("reply_keys.size() == 0 in depth_search");
+            continue;
+        }
+
+        // check if these new entries have reached the maximum depth
+        if (reply_keys[0].layer >= depth) {
+
+            // first cascade the evaluations all the way up (from the parent/s)
+            // std::vector<TreeKey> node_parents = tree_ptr->layer_pointers_[node.layer]
+            //                                         ->board_list[node.entry].parent_keys;
+            // int best_eval = tree_ptr->update_upstream_evaluations(node_parents);
+
+            // update evaluations upstream of this leaf node
+            int best_eval =  tree_ptr->update_upstream_evaluations(node);
+
+            // determine if this line has improved the best evaluation
+            if (best_eval * analysis.sign > analysis.best_eval * analysis.sign) {
+
+                // the new evaluation is better
+                analysis.best_eval = best_eval;
+                analysis.best_move_sequence = tree_ptr->layer_pointers_[node.layer]
+                                                ->board_list[node.entry].parent_moves;
+                // analysis.best_move_sequence.push_back(tree_ptr->layer_pointers_[reply_keys[0].layer]
+                //                                         ->board_list[reply_keys[0].entry].);
+                analysis.depth_evaluated = reply_keys[0].layer;
+            }
+
+            // do not go any deeper from this node
+            continue;
+        }
+
+        // add these replies to the stack, up to the maximum width
+
+        // add the first 'width' entries, but add them in reverse order
+        int num_keys_to_add = width;
+        if (reply_keys.size() < num_keys_to_add) {
+            num_keys_to_add = reply_keys.size();
+        }
+        for (int i = 0; i < num_keys_to_add; i++) {
+            int ind = num_keys_to_add - 1 - i;
+            key_stack.push(reply_keys[ind]);
+        }
+
+        /* ----- end of loop ----- */
+    }
+
+    // // now recursively search deeper into the tree
+    // recursive_search(tree_ptr, first_replies);
+
+    // // once everything is finished, update any remaining evalutions
+    // tree_ptr->update_upstream_evaluations(); // updates every single position from the search
 }
 
-Move Engine::generate_NEW(Board board, bool white_to_play)
+Move Engine::generate(Board board, bool white_to_play, double target_time)
 {
     /* generate using a depth first search of the board */
 
-    print_str("Entered generate_NEW() function");
+    print_str("Entered the generate() function");
 
     // start the clock
     start_ = std::chrono::steady_clock::now();
 
+    // initialise settings
+    analysis.allowable_time_exceeded = false;
+    analysis.current_depth = 0;
+
     // testing: calculate parameters
-    float target_time = -1;
     calculate_settings(target_time);
-    
-    // LIMIT TIME TO 10 seconds
-    settings.allowable_time_ms = 10000;
 
     // prepare analysis
     analysis.depth_evaluated = 0;
+    analysis.this_eval_depth_evaluated = 0;
+    analysis.best_eval_layerwise = std::vector<int>(settings.depth);
+    analysis.this_eval_layerwise = std::vector<int>(settings.depth);
+
     if (white_to_play) {
         // we are white
         analysis.white = true;
         analysis.sign = 1;
         analysis.best_eval = WHITE_MATED; // our worst possible evaluation
+        analysis.their_best_eval = BLACK_MATED; // their worst possible evaluation
     }
     else {
         // we are black
         analysis.white = false;
         analysis.sign = -1;
         analysis.best_eval = BLACK_MATED; // our worst possible evaluation
+        analysis.their_best_eval = WHITE_MATED; // their worst possible evaluation
+    }
+
+    // populate the 'best evals' with the worst possible case at each layer
+    for (int i = 0; i < settings.depth; i++) {
+        if (i % 2 == 0) { // our move
+            analysis.best_eval_layerwise[i] = WHITE_MATED * analysis.sign;
+            analysis.this_eval_layerwise[i] = WHITE_MATED * analysis.sign;
+        }
+        else { // their move
+            analysis.best_eval_layerwise[i] = BLACK_MATED * analysis.sign;
+            analysis.this_eval_layerwise[i] = BLACK_MATED * analysis.sign;
+        }
     }
 
     // make a new tree
     std::unique_ptr<LayeredTree> tree_ptr = std::make_unique<LayeredTree>
-        (board, white_to_play, settings.width_vector[0]);
+        (board, white_to_play, settings.width);
 
     // print initial information
     print_startup(tree_ptr);
 
     bool game_continues;
 
-    depth_search(tree_ptr);
+    std::vector<int> depth_vector {3, 5, 8};
+    std::vector<int> width_vector {20, 10, 5};
 
-    // for (int i = 0; i < settings.depth; i++) { 
+    // std::vector<int> depth_vector {8};
+    // std::vector<int> width_vector {10};
 
-    //     // print layer by layer information
-    //     print_layer(tree_ptr, i);
-
-    //     game_continues = tree_ptr->next_layer(settings.width_vector[i],
-    //         settings.num_cpus);
-
-    //     if (not game_continues) break;
-
-    //     tree_ptr->target_prune(settings.prune_vector[i]);
-    // }
-
-    print_str("About to get the best moves from the tree");
-
-    std::vector<MoveEntry> best_moves = tree_ptr->get_best_moves();
-
-    // end the clock
-    end_ = std::chrono::steady_clock::now();
-
-    // determine the timings overall and per board
-    details.total_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(end_ - start_).count();
-    details.boards_checked = tree_ptr->boards_checked_;
-    details.ms_per_board = double(details.total_ms) / double(details.boards_checked);
-
-    // print out a roundup of the engine generation
-    print_roundup(tree_ptr);
-
-    if (best_moves.size() == 0) {
-        throw std::runtime_error("no best moves, all nodes must be dead");
+    // depth search with iterative deepening
+    for (int i = 0; i < depth_vector.size(); i++) {
+        depth_search(tree_ptr, depth_vector[i], width_vector[i]);
     }
 
-    return best_moves[0].move;
-}
+    print_str("Depth search has now finished. Now extracting the best moves.");
 
-Move Engine::generate(Board board, bool white_to_play, double target_time)
-{
-    /* generate a move from a given board */
-
-    // TESTING: skip this function and try a different one
-    return generate_NEW(board, white_to_play);
-
-    // start the clock
-    start_ = std::chrono::steady_clock::now();
-
-    // testing: calculate parameters
-    calculate_settings(target_time);
-
-    // make a new tree
-    std::unique_ptr<LayeredTree> tree_ptr = std::make_unique<LayeredTree>
-        (board, white_to_play, settings.width_vector[0]);
-
-    // print initial information
-    print_startup(tree_ptr);
-
-    bool game_continues;
-
-    for (int i = 0; i < settings.depth; i++) { 
-
-        // print layer by layer information
-        print_layer(tree_ptr, i);
-
-        game_continues = tree_ptr->next_layer(settings.width_vector[i],
-            settings.num_cpus);
-
-        if (not game_continues) break;
-
-        tree_ptr->target_prune(settings.prune_vector[i]);
+    // reduce the active move
+    tree_ptr->active_move_ = depth_vector[0];
+    if (tree_ptr->active_move_ > analysis.depth_evaluated) {
+        std::cout << "Engine::generate() warning: active_move_ = " 
+            << tree_ptr->active_move_ << ", analysis.depth_evaluated = "
+            << analysis.depth_evaluated << ", so capping active_move_\n";
+        tree_ptr->active_move_ = analysis.depth_evaluated;
     }
+    std::cout << "Active move is " << tree_ptr->active_move_ << "\n";
 
     std::vector<MoveEntry> best_moves = tree_ptr->get_best_moves();
 
@@ -3270,6 +3466,11 @@ void Game::play_terminal(bool human_first)
     Board board = create_board();
     engine_pointer = std::make_unique<Engine>();
 
+    // engine settings
+    engine_pointer->set_depth(6);
+    engine_pointer->set_width(5);
+    double target_time = 5;
+
     bool engine_next = not human_first;
     bool engine_colour = not human_first;
     Move next_move;
@@ -3280,7 +3481,7 @@ void Game::play_terminal(bool human_first)
         print_board(board, true);
 
         if (engine_next) {
-            next_move = engine_pointer->generate(board, engine_colour);
+            next_move = engine_pointer->generate(board, engine_colour, target_time);
         }
         else {
             next_move = get_human_move(board, not engine_colour);

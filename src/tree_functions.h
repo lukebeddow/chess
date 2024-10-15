@@ -7,6 +7,7 @@
 #include <iostream>
 #include <numeric>
 #include <algorithm>
+#include <stack>
 
 #include "board_functions.h"
 
@@ -103,7 +104,6 @@ struct MoveEntry {
     int new_eval;
     std::size_t new_hash;
     int active_move = -1;
-    TreeKey child_key;
 
     // member functions
     Move get_move() { return move; }
@@ -224,7 +224,9 @@ public:
         generated_moves_struct& gen_moves);
 
     std::vector<TreeKey> add_depth_at_key(TreeKey key);
-    void update_upstream_evaluations();
+    int update_upstream_evaluations();
+    int update_upstream_evaluations(TreeKey node);
+    int update_upstream_evaluations(std::vector<TreeKey> id_list);
 
     bool grow_tree();
     void print();
@@ -234,7 +236,6 @@ public:
     void print_new_ids(int max);
     bool check_game_continues();
     void advance_ids();
-    // void step_forward();
     void cascade();
     bool next_layer();
     bool next_layer(int layer_width, int num_cpus);
@@ -257,7 +258,6 @@ public:
     std::vector<TreeKey> my_sort(std::vector<TreeKey>& vec);
     std::vector<TreeKey> remove_duplicates(std::vector<TreeKey>& vec);
     void deactivate_node(TreeKey& node);
-    // MoveEntry search(int depth);
 
     bool is_active(MoveEntry& move) {
         return move.active_move == active_move_;
@@ -279,11 +279,9 @@ public:
     /* Class variables */
     int current_move_;                          // which move are we on at layer 0
     bool fresh_tree_;
-    //std::hash<int[120]> hash_func_;             // board hash function
     boost::hash<int_P[120]> hash_func_;           // board hash function
-    int width_;
-    int max_num_replies_added_per_board_ = 200; // when adding replies, add up to this number
-    int default_cpus_;
+    int width_;                                   // max num replies to add to each board
+    int default_cpus_;                            // num cpus if threading enabled
 
     // likely to be depreciated
     std::vector<TreeKey> old_ids_;
@@ -313,7 +311,7 @@ public:
     TreeKey root_;
     bool root_wtp_;
     Board root_board_;
-    int root_outcome_;
+    int root_outcome_ = 0;
     int active_move_;
     std::vector<std::shared_ptr<TreeLayer>> layer_pointers_;
 
@@ -365,11 +363,21 @@ public:
         bool white;
         int sign;
         int best_eval;
+        int their_best_eval;
         int eval_slack_added;
         std::vector<Move> best_move_sequence;
         int depth_evaluated;
         int current_depth;
         bool allowable_time_exceeded;
+
+        std::vector<int> best_eval_layerwise; // evaluations of the best line layerwise
+
+        std::vector<int> best_eval_ours_layerwise;
+        std::vector<int> best_eval_theirs_layerwise;
+
+        std::vector<int> this_eval_layerwise;
+        int this_eval_depth_evaluated;
+
     } analysis;
 
     std::chrono::time_point<std::chrono::steady_clock> start_, end_;
@@ -388,11 +396,11 @@ public:
     void print_responses(std::unique_ptr<LayeredTree>& tree_ptr);
     void calibrate(Board board, bool white_to_play);
     void calculate_settings(double target_time);
-    Move generate(Board board, bool white_to_play, double target_time = -1);
+    Move generate(Board board, bool white_to_play, double target_time = 5);
 
     // new
     void depth_search(std::unique_ptr<LayeredTree>& tree_ptr);
-    Move generate_NEW(Board board, bool white_to_play);
+    void depth_search(std::unique_ptr<LayeredTree>& tree_ptr, int depth, int width);
     void recursive_search(std::unique_ptr<LayeredTree>& tree_ptr,
         std::vector<TreeKey> best_replies);
 

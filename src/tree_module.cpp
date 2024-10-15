@@ -82,7 +82,6 @@ PYBIND11_MODULE(tree_module, m) {
         .def("add_board_replies", &LayeredTree::add_board_replies)
         .def("grow_tree", &LayeredTree::grow_tree)
         .def("advance_ids", &LayeredTree::advance_ids)
-        // .def("step_forward", &LayeredTree::step_forward)
         .def("cascade", &LayeredTree::cascade)
         .def("limit_prune", &LayeredTree::limit_prune)
         .def("print_best_move", &LayeredTree::print_best_move)
