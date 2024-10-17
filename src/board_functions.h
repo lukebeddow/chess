@@ -151,6 +151,7 @@ struct generated_moves_struct {
     int base_evaluation;        // evaluation of the starting board
     int outcome = 0;            // game outcome (0=none, 1=checkmate, 2=draw)
     Board base_board;
+    bool white_to_play;
     std::vector<move_struct> moves;
 
     // member functions
@@ -188,8 +189,9 @@ constexpr int BLACK_MATED = 100100;
     void py_print_board(Board& board);
 #endif
 
-Board create_board();
+Board create_board(bool pieces = true);
 Board create_board(std::vector<std::string> moves);
+Board FEN_to_board(std::string fen);
 bool check_board(Board& board);
 void print_board(Board& board);
 void print_board(Board& board, bool tidy);

@@ -274,7 +274,7 @@ std::string square_numbers_to_letters(int square)
     return move_letters;
 }
 
-Board create_board() {
+Board create_board(bool pieces) {
     /*This recieves a board array and sets everything to its default values*/
 
     //static int board[120];
@@ -286,31 +286,40 @@ Board create_board() {
         // default
         board.arr[i] = -7;
 
-        // set castle rights booleans to true
-        if (i == 0 or i == 1 or i == 2 or i == 3) board.arr[i] = 7;
+        if (pieces) {
 
-        // white pawns
-        if ((i / 10 == 3) and (i != 30) and (i != 39)) {
-            board.arr[i] = 1;
+            // set castle rights booleans to true
+            if (i == 0 or i == 1 or i == 2 or i == 3) board.arr[i] = 7;
+
+            // white pawns
+            if ((i / 10 == 3) and (i != 30) and (i != 39)) {
+                board.arr[i] = 1;
+            }
+            // black pawns
+            if ((i / 10 == 8) and (i != 80) and (i != 89)) {
+                board.arr[i] = -1;
+            }
+
+            // white pieces
+            if (i == 21 or i == 28) board.arr[i] = 4;       // rooks
+            if (i == 22 or i == 27) board.arr[i] = 2;       // knights
+            if (i == 23 or i == 26) board.arr[i] = 3;       // bishops
+            if (i == 25) board.arr[i] = 5;                  // queen
+            if (i == 24) board.arr[i] = 6;                  // king
+
+            // black pieces
+            if (i == 91 or i == 98) board.arr[i] = -4;      // rooks
+            if (i == 92 or i == 97) board.arr[i] = -2;      // knights
+            if (i == 93 or i == 96) board.arr[i] = -3;      // bishops
+            if (i == 95) board.arr[i] = -5;                 // queen
+            if (i == 94) board.arr[i] = -6;                 // king
         }
-        // black pawns
-        if ((i / 10 == 8) and (i != 80) and (i != 89)) {
-            board.arr[i] = -1;
+        else {
+            if (i > 20 and i < 29) board.arr[i] = 0;
+            if (i > 30 and i < 39) board.arr[i] = 0;
+            if (i > 80 and i < 89) board.arr[i] = 0;
+            if (i > 90 and i < 99) board.arr[i] = 0;
         }
-
-        // white pieces
-        if (i == 21 or i == 28) board.arr[i] = 4;       // rooks
-        if (i == 22 or i == 27) board.arr[i] = 2;       // knights
-        if (i == 23 or i == 26) board.arr[i] = 3;       // bishops
-        if (i == 25) board.arr[i] = 5;                  // queen
-        if (i == 24) board.arr[i] = 6;                  // king
-
-        // black pieces
-        if (i == 91 or i == 98) board.arr[i] = -4;      // rooks
-        if (i == 92 or i == 97) board.arr[i] = -2;      // knights
-        if (i == 93 or i == 96) board.arr[i] = -3;      // bishops
-        if (i == 95) board.arr[i] = -5;                 // queen
-        if (i == 94) board.arr[i] = -6;                 // king
 
         // board squares
         if (i > 40 and i < 49) board.arr[i] = 0;
@@ -1864,6 +1873,8 @@ int linear_insert(int value, int start_index, std::vector<int>& vec)
 
     // if we get here, we didn't find anywhere to insert the value
     vec.push_back(value);
+
+    return vec.size() - 1;
 }
 
 std::vector<int> order_attackers_defenders(std::vector<int>& pieces,
@@ -3163,8 +3174,10 @@ bool verify_checkmate(Board& board, bool white_to_play)
     return false;
 }
 
-generated_moves_struct generate_moves(Board& board, bool white_to_play) {
-    /* This function finds the best moves to play in a given board */
+generated_moves_struct generate_moves(Board& board, bool white_to_play) 
+{
+    /* This function finds the best moves to play in a given board, and returns
+    them ordered from best to worst (depending on if its white or blacks turn) */
 
     generated_moves_struct generated_moves;
     piece_attack_defend_struct temp_pad_struct;     // for piece analysis
@@ -3174,6 +3187,7 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play) {
 
     // save the starting board
     generated_moves.base_board = board;
+    generated_moves.white_to_play = white_to_play;
 
     // first, get a list of all the total legal moves in the position
     total_legal_moves_struct tlm_struct = total_legal_moves(board, white_to_play);
@@ -3710,6 +3724,69 @@ Board copy_board(Board& base_board)
     }
 
     return new_board;
+}
+
+Board FEN_to_board(std::string fen)
+{
+    /* convert from FEN notation to a board state */
+
+    std::cout << "FEN_to_board() received: " << fen << "\n";
+
+    // create the number sequence for each square
+    std::vector<int> board_ind(64);
+    int ind = 0;
+    for (int r = 90; r >= 20; r -= 10) {
+        for (int c = 8; c >= 1; c--) {
+            board_ind[ind] = r + c;
+            ind += 1;
+        }
+    }
+
+    // create an empty board
+    Board board = create_board(false);
+
+    // now loop through the FEN string
+    ind = 0;
+    for (char c : fen) {
+        if (c == 'p') board.arr[board_ind[ind]] = -1;
+        else if (c == 'n') board.arr[board_ind[ind]] = -2;
+        else if (c == 'b') board.arr[board_ind[ind]] = -3;
+        else if (c == 'r') board.arr[board_ind[ind]] = -4;
+        else if (c == 'q') board.arr[board_ind[ind]] = -5;
+        else if (c == 'k') board.arr[board_ind[ind]] = -6;
+        else if (c == 'P') board.arr[board_ind[ind]] = 1;
+        else if (c == 'N') board.arr[board_ind[ind]] = 2;
+        else if (c == 'B') board.arr[board_ind[ind]] = 3;
+        else if (c == 'R') board.arr[board_ind[ind]] = 4;
+        else if (c == 'Q') board.arr[board_ind[ind]] = 5;
+        else if (c == 'K') board.arr[board_ind[ind]] = 6;
+        else if (c == '1') ind += 0;
+        else if (c == '2') ind += 1;
+        else if (c == '3') ind += 2;
+        else if (c == '4') ind += 3;
+        else if (c == '5') ind += 4;
+        else if (c == '6') ind += 5;
+        else if (c == '7') ind += 6;
+        else if (c == '8') ind += 7;
+        else if (c == '/') ind -= 1;
+        // else if (c == '2') {
+
+        // }
+        // else if (c == 'n') {
+
+        // }
+        ind += 1;
+
+        if (ind >= 64) {
+            break;
+        }
+    }
+
+    // en passant, castle rights, next to play
+    // num moves total, num moves since last capture
+    // all these are still yet to be added
+
+    return board;
 }
 
 //int main()
