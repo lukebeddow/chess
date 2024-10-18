@@ -36,6 +36,8 @@ PYBIND11_MODULE(tree_module, m) {
         .def("get_new_hash", &MoveEntry::get_new_hash)
         .def("print", py::overload_cast<>(&MoveEntry::print))
         .def("print", py::overload_cast<std::string>(&MoveEntry::print))
+        .def("to_letters", &MoveEntry::to_letters)
+        .def("get_depth_evaluated", &MoveEntry::get_depth_evaluated)
         ;
 
     py::class_<TreeEntry>(m, "TreeEntry")
@@ -97,6 +99,14 @@ PYBIND11_MODULE(tree_module, m) {
         .def("print_id_list", &LayeredTree::print_id_list)
         .def("test_dictionary", &LayeredTree::test_dictionary)
         .def("find_hash", &LayeredTree::find_hash)
+        ;
+
+    py::class_<Engine>(m, "Engine")
+        .def(py::init<>())
+        .def("set_width", &Engine::set_width)
+        .def("set_depth", &Engine::set_depth)
+        .def("generate_engine_moves_FEN", &Engine::generate_engine_moves_FEN, 
+            py::arg("fen_string") = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR", py::arg("target_time") = 5)
         ;
 
     py::class_<GameBoard>(m, "GameBoard")

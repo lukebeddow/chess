@@ -113,6 +113,8 @@ struct MoveEntry {
     void print(std::string starter);
     std::string print_move();
     std::string print_eval();
+    std::string to_letters() { return move.to_letters(); }
+    int get_depth_evaluated() { return active_move; }
 
     // comparison operator for sorting
     bool operator< (const MoveEntry& other) const {
@@ -403,6 +405,8 @@ public:
     void depth_search(std::unique_ptr<LayeredTree>& tree_ptr, int depth, int width);
     void recursive_search(std::unique_ptr<LayeredTree>& tree_ptr,
         std::vector<TreeKey> best_replies);
+    std::vector<MoveEntry> generate_engine_moves(Board board, bool white_to_play, double target_time = 5);
+    std::vector<MoveEntry> generate_engine_moves_FEN(std::string fen, double target_time = 5);
 
 };
 

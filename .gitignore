@@ -6,3 +6,4 @@ build
 *.pyc
 data/
 stockfish/
+gamedata/

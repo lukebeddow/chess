@@ -1,6 +1,6 @@
 #include "stockfish.h"
 
-void StockfishWrapper::init()
+void StockfishWrapper::begin()
 {
   /* initialise the stockfish engine in its own thread as a child process */
 
@@ -216,15 +216,15 @@ std::vector<StockfishMove> StockfishWrapper::generate_moves(std::string fen)
   std::cout << move_string << "\n";
 }
 
-int main() {
+// int main() {
 
-  StockfishWrapper sf;
+//   StockfishWrapper sf;
 
-  sf.init();
+//   sf.begin();
 
-  std::string fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+//   std::string fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-  sf.generate_moves(fen);
+//   sf.generate_moves(fen);
 
-  return 0;
-}
+//   return 0;
+// }

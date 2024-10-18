@@ -3050,7 +3050,7 @@ void Engine::depth_search(std::unique_ptr<LayeredTree>& tree_ptr, int depth, int
     // tree_ptr->update_upstream_evaluations();
 }
 
-Move Engine::generate(Board board, bool white_to_play, double target_time)
+std::vector<MoveEntry> Engine::generate_engine_moves(Board board, bool white_to_play, double target_time)
 {
     /* generate using a depth first search of the board */
 
@@ -3151,7 +3151,38 @@ Move Engine::generate(Board board, bool white_to_play, double target_time)
         throw std::runtime_error("no best moves, all nodes must be dead");
     }
 
+    return best_moves;
+}
+
+Move Engine::generate(Board board, bool white_to_play, double target_time)
+{
+    /* generate a single best move, and return this */
+
+    std::vector<MoveEntry> best_moves = generate_engine_moves(board, white_to_play, target_time);
+
     return best_moves[0].move;
+}
+
+std::vector<MoveEntry> Engine::generate_engine_moves_FEN(std::string fen, double target_time)
+{
+    /* generate a list of candidate moves, and their evaluations, from an fen position */
+
+    Board board = FEN_to_board(fen);
+
+    // extract who plays next from the board
+    bool white_to_play;
+    if (does_white_play_next(board)) {
+        white_to_play = true;
+    }
+    else if (does_black_play_next(board)) {
+        white_to_play = false;
+    }
+    else {
+        std::cout << "FEN string: " << fen << "\n";
+        throw std::runtime_error("Engine::generate_moves() error: who plays next was NOT extracted from fen string");
+    }
+
+    return generate_engine_moves(board, white_to_play, target_time);
 }
 
 GameBoard::GameBoard()

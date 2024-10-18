@@ -38,7 +38,7 @@ struct StockfishWrapper {
   int elo_value = 0;      // set 0 to disable limiting, min=1320, max=3190
 
   // functions
-  void init();
+  void begin();
   void send_command(const std::string& command);
   std::vector<StockfishMove> read_best_at_depth(int depth = 0);
   std::vector<StockfishMove> generate_moves(std::string fen);
