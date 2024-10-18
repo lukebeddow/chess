@@ -15,8 +15,8 @@
 # ----- user defined variables ----- #
 
 # define the targets (must compile from a .cpp file with same name in SOURCEDIR)
-TARGET_LIST_CPP := play_terminal dr_memory_build test_terminal
-TARGET_LIST_PY := board_module tree_module
+TARGET_LIST_CPP := play_terminal dr_memory_build test_terminal stockfish
+TARGET_LIST_PY := board_module tree_module stockfish_module
 
 # define directory structure
 SOURCEDIR := src
