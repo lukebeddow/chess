@@ -8,8 +8,64 @@
 typedef int int_P; // piece int, signed, -7 to +7 (int8_t)
 typedef int int_B; // board array int, unsigned, 0 to 120
 
+/* Globals */
+
+constexpr int WHITE_MATED = -100100;
+constexpr int BLACK_MATED = 100100;
+constexpr int BOARD_ARR_SIZE = 120;
+
+/* Type definitions */
+
+// meaning of each integer in a board square
+enum BoardSq {
+    empty = 0,
+    wP = 1,
+    wN = 2,
+    wB = 3,
+    wR = 4,
+    wQ = 5,
+    wK = 6,
+    yes = 7,
+    bP = -1,
+    bN = -2,
+    bB = -3,
+    bR = -4,
+    bQ = -5,
+    bK = -6,
+    no = -7
+};
+
+// location of booleans in board array (can only be yes/no, ie +7/-7 -> abs() == 7)
+enum BoardInd {
+    castleWK = 0,
+    castleWQ = 1,
+    castleBK = 2,
+    castleBQ = 3,
+    passantWipe = 4,
+    passantStart = 5,      // index where passant booleans begin
+    passantEnd = 20,       // passant booleans board[5]-board[20] inclusive (16 of them)
+    whiteCastled = 101,
+    blackCastled = 102,
+    whitePlaysNext = 103,  // note this field is not binding and rarely used
+    blackPlaysNext = 104,  // note this field is not binding and rarely used
+    lastIndex = BOARD_ARR_SIZE - 1
+};
+
+enum MoveMod {
+    moveToEmpty = 1,
+    capture = 2,
+    captureEnPassant = 3,
+    // 4 is unused
+    castle = 5,
+    promoteN = 6,
+    promoteQ = 7,
+    promoteB = 8,
+    promoteR = 9,
+    promotionAny = 10
+};
+
 struct Board {
-    int_P arr[120];
+    int_P arr[BOARD_ARR_SIZE];
     int_P look(int_B i) { return arr[i]; }
     void set(int_B i, int_P val) { arr[i] = val; }
 };
@@ -141,6 +197,37 @@ struct move_struct {
     int get_dest_sq() { return dest_sq; }
     int get_move_mod() { return move_mod; }
     Board get_board() { return board; }
+    std::string to_letters() {
+
+        // create strings
+        std::string move_letters;
+        std::string ind_letters = std::to_string(start_sq) + std::to_string(dest_sq);
+        
+        if (ind_letters.size() != 4) {
+            throw std::runtime_error("move string doesn't contain 4 letters! Incorrect move");
+        }
+
+        for (int i = 0; i < 2; i++) {
+
+            // what are the two numbers that make up this square
+            char x = ind_letters[2 * i];
+            char y = ind_letters[2 * i + 1];
+
+            move_letters += 153 - y; // '1' becomes 'h' etc
+            move_letters += x - 1; // '2' becomes '1' etc
+
+        }
+
+        // if we are promoting, add clarification
+        switch (move_mod) {
+        case 6: move_letters += 'n'; break;
+        case 7: move_letters += 'q'; break;
+        case 8: move_letters += 'b'; break;
+        case 9: move_letters += 'r'; break;
+        }
+
+        return move_letters;
+    }
 };
 
 struct generated_moves_struct {
@@ -163,11 +250,6 @@ struct generated_moves_struct {
     int get_length() { return moves.size(); }
     bool is_mating_move() { return mating_move; }
 };
-
-/* Globals */
-
-constexpr int WHITE_MATED = -100100;
-constexpr int BLACK_MATED = 100100;
 
 //struct {
 //    //              A  B  C  D  E  F  G  H
@@ -208,5 +290,12 @@ std::string get_game_outcome(Board& board, bool white_to_play);
 int square_letters_to_numbers(std::string square);
 std::string square_numbers_to_letters(int square);
 bool is_promotion(Board& board, bool white_to_play, std::string move_letters);
+
+generated_moves_struct generate_moves_FEN(std::string fen);
+bool does_white_play_next(Board& board);
+bool does_black_play_next(Board& board);
+void set_white_plays_next(Board& board);
+void set_black_plays_next(Board& board);
+void wipe_any_plays_next(Board& board);
 
 #endif

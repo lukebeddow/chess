@@ -12,7 +12,8 @@ PYBIND11_MODULE(board_module, m) {
     py::class_<Board>(m, "Board")
         .def(py::init<>())
         .def("look", &Board::look)
-        .def("set", &Board::set);
+        .def("set", &Board::set)
+        ;
 
     py::class_<piece_attack_defend_struct>(m, "piece_attack_defend_struct")
         .def(py::init<>())
@@ -20,7 +21,8 @@ PYBIND11_MODULE(board_module, m) {
         .def("get_attack_me", &piece_attack_defend_struct::get_attack_me)
         .def("get_defend_me", &piece_attack_defend_struct::get_defend_me)
         .def("get_piece_view", &piece_attack_defend_struct::get_piece_view)
-        .def("get_evalution", &piece_attack_defend_struct::get_evaluation);
+        .def("get_evalution", &piece_attack_defend_struct::get_evaluation)
+        ;
 
     py::class_<total_legal_moves_struct>(m, "total_legal_moves_struct")
         .def(py::init<>())
@@ -49,7 +51,9 @@ PYBIND11_MODULE(board_module, m) {
         .def("get_start_sq", &move_struct::get_start_sq)
         .def("get_dest_sq", &move_struct::get_dest_sq)
         .def("get_move_mod", &move_struct::get_move_mod)
-        .def("get_board", &move_struct::get_board);
+        .def("get_board", &move_struct::get_board)
+        .def("to_letters", &move_struct::to_letters)
+        ;
 
     py::class_<generated_moves_struct>(m, "generated_moves_struct")
         .def(py::init<>())
@@ -59,7 +63,12 @@ PYBIND11_MODULE(board_module, m) {
         .def("get_moves", &generated_moves_struct::get_moves)
         .def("does_game_continue", &generated_moves_struct::does_game_continue)
         .def("get_length", &generated_moves_struct::get_length)
-        .def("is_mating_move", &generated_moves_struct::is_mating_move);
+        .def("is_mating_move", &generated_moves_struct::is_mating_move)
+        
+        ;
+
+    // expose only functions we want to be usable from python
+    m.def("generate_moves_FEN", &generate_moves_FEN);
 
     // functions that use the board struct
     // m.def("create_board", py::overload_cast<>(&create_board));
