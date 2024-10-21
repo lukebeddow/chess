@@ -75,7 +75,8 @@ def evaluate_engine(args):
     avg_eval_difference += eval_difference
 
     if args.log_level >= 2:
-      print(f"Position {i + 1}/{num_rand}, eval_difference = {eval_difference}, sf best move = {sf_moves[0].move_letters} (eval={sf_moves[0].eval}, depth={sf_moves[0].depth}), my best move = {my_moves[0].move_letters} (eval={my_moves[0].eval}, depth={my_moves[0].depth})")
+      print(f"Position {i + 1}/{num_rand}, eval_difference = {eval_difference}, sf best move = {sf_moves[0].move_letters} (eval={sf_moves[0].eval}, depth={sf_moves[0].depth}), my best move = {my_moves[0].move_letters} (eval={my_moves[0].eval}, depth={my_moves[0].depth})",
+            flush=True)
 
   # determine the average difference in evaluations
   avg_eval_difference /= len(pydata)
@@ -94,6 +95,9 @@ def generate_sf_data(args):
   filepath = "./data/"
   filename = "ficsgamesdb_2023_standard2000_nomovetimes_400127.txt"
   filename = args.data_file
+
+  if args.log_level >= 1:
+    print(f"Preparing to generate data from file: {filepath + filename}")
 
   # read in the text data
   with open(filepath + filename, "r") as f:
@@ -120,7 +124,7 @@ def generate_sf_data(args):
   sf_instance = sf.StockfishWrapper()
   sf_instance.target_depth = 20
   sf_instance.num_lines = 200
-  sf_instance.num_threads = 1
+  sf_instance.num_threads = args.num_threads
   sf_instance.begin()
 
   gamedata = []
@@ -132,7 +136,7 @@ def generate_sf_data(args):
   for num, line in enumerate(rand_pos):
 
     if args.log_level >= 2 or (args.log_level == 1 and num % 10 == 1):
-      print(f"Preparing position {num + 1} / {num_rand}")
+      print(f"Preparing position {num + 1} / {num_rand}", flush=True)
 
     # extract the fen string CHECK THIS IS ALWAYS SUITABLE
     fen = line.split(" c0 ")[0]
@@ -187,7 +191,9 @@ if __name__ == "__main__":
   parser.add_argument("--evaluate-engine", action="store_true")     # compare my engine against stockfish
   parser.add_argument("--generate-data", action="store_true")       # generate stockfish data
   parser.add_argument("--num-rand", type=int, default=10)           # number of random samples
-  parser.add_argument("--data-file", default="ficsgamesdb_2023_standard2000_nomovetimes_400127.txt") # data file for stockfish generation
+  parser.add_argument("--num-threads", type=int, default=1)         # number of cpu threads to allocate to stockfish
+  parser.add_argument("--target-depth", type=int, default=20)       # stockfish target depth for evaluations
+  parser.add_argument("--data-file", default="ficsgamesdb_2023_standard2000_nomovetimes.txt") # data file for stockfish generation
   parser.add_argument("--use-depth-search", action="store_true")    # use depth search for my engine
   parser.add_argument("--log-level", type=int, default=2)           # how much debug printing to do
   parser.add_argument("--random-seed", type=int, default=None)      # random seed for data generation
