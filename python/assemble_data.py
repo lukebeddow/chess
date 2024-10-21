@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from collections import namedtuple
 import time
 import argparse
+import numpy as np
+from scipy.stats import spearmanr
 
 Move = namedtuple("Move",
                   ("move_letters", "eval", "depth", "ranking"))
@@ -24,7 +26,32 @@ def get_ranking_difference(my_moves, sf_moves):
   """
   Determine the spearman rank coefficient between the move rankings
   """
-  pass
+
+  if (len(my_moves) != len(sf_moves)):
+    print(f"Spearman ranking failed, lengths are different. my_moves length = {len(my_moves)}, sf_moves length = {len(sf_moves)}")
+    if len(my_moves) > len(sf_moves):
+      sf_moves = sf_moves[:len(my_moves)]
+    else:
+      my_moves = my_moves[:len(sf_moves)]
+  
+  # get the moves into relative orders, taking stockfish as ground truth
+  sf_rank = list(range(len(sf_moves)))
+
+  my_rank = []
+  for move in my_moves:
+    for i in range(len(sf_moves)):
+      if move.move_letters.lower() == sf_moves[i].move_letters.lower():
+        my_rank.append(i)
+  
+  # convert into numpy arrays
+  sf_np = np.array(sf_rank)
+  my_np = np.array(my_rank)
+
+  rank = spearmanr(sf_np, my_np)
+
+  print(f"The spearman rank score is {rank}")
+
+  return rank
 
 def evaluate_engine(args):
   """
@@ -73,6 +100,11 @@ def evaluate_engine(args):
 
     eval_difference = abs(sf_eval - my_eval)
     avg_eval_difference += eval_difference
+
+    print(my_moves)
+    print(sf_moves)
+
+    rank = get_ranking_difference(my_moves=my_moves, sf_moves=sf_moves)
 
     if args.log_level >= 2:
       print(f"Position {i + 1}/{num_rand}, eval_difference = {eval_difference}, sf best move = {sf_moves[0].move_letters} (eval={sf_moves[0].eval}, depth={sf_moves[0].depth}), my best move = {my_moves[0].move_letters} (eval={my_moves[0].eval}, depth={my_moves[0].depth})",
@@ -145,31 +177,34 @@ def generate_sf_data(args):
     sfmoves = sf_instance.generate_moves(fen)
     sf_eval = sfmoves[0].move_eval
 
-    if not sf_only:
-      # get my evaluation
-      gen_moves_struct = bf.generate_moves_FEN(fen)
-      my_moves = gen_moves_struct.moves
-      my_eval = gen_moves_struct.base_evaluation # before move generation
+    # if not sf_only:
+    #   # get my evaluation
+    #   gen_moves_struct = bf.generate_moves_FEN(fen)
+    #   my_moves = gen_moves_struct.moves
+    #   my_eval = gen_moves_struct.base_evaluation # before move generation
 
     # save the data in python-only format
     sf_move_data = []
+    print(f"The number of sfmoves is {len(sfmoves)}")
     for i, m in enumerate(sfmoves):
       if i == 0: sf_eval = m.move_eval
       new_move = Move(m.move_letters, m.move_eval, m.depth_evaluated, i)
       sf_move_data.append(new_move)
 
-    if not sf_only:
-      my_move_data = []
-      for i, m in enumerate(my_moves):
-        new_move = Move(m.to_letters(), m.evaluation, 1, i)
-        my_move_data.append(new_move)
+    # if not sf_only:
+    #   my_move_data = []
+    #   for i, m in enumerate(my_moves):
+    #     new_move = Move(m.to_letters(), m.evaluation, 1, i)
+    #     my_move_data.append(new_move)
 
     # now add to the overall gamedata
     new_position = Position(fen, sf_eval, sf_move_data)
+
+    # print(new_position.move_vector)
     
-    if not sf_only:
-      new_position_mine = Position(fen, my_eval, my_move_data)
-      new_position = [new_position, new_position_mine]
+    # if not sf_only:
+    #   new_position_mine = Position(fen, my_eval, my_move_data)
+    #   new_position = [new_position, new_position_mine]
 
     gamedata.append(new_position)
 
