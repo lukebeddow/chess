@@ -3,10 +3,13 @@
 
 #include <iostream>
 #include <chrono>
+#include <numeric>
 #include <boost/process.hpp>
 #include <boost/asio.hpp>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
+
+#include "board_functions.h"
 
 namespace bp = boost::process;
 
@@ -21,6 +24,11 @@ struct StockfishMove {
       << float(move_eval) * 1e-3 << " (" << move_eval
       << "), depth_evaluated = " << depth_evaluated
       << ", move_placement = " << move_placement << "\n";
+  }
+
+  // comparison operator for sorting
+  bool operator< (const StockfishMove& other) const {
+      return move_eval < other.move_eval;
   }
 };
 

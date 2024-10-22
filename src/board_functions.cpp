@@ -3784,6 +3784,16 @@ Board copy_board(Board& base_board)
 }
 
 // these are currently ONLY used for FEN->board and then generate_moves
+bool does_white_play_next(std::string fen) {
+    Board board = FEN_to_board(fen);
+    return does_white_play_next(board);
+}
+
+bool does_black_play_next(std::string fen) {
+    Board board = FEN_to_board(fen);
+    return does_black_play_next(board);
+}
+
 bool does_white_play_next(Board& board) {
     return (board.arr[BoardInd::whitePlaysNext] == BoardSq::yes);
 }

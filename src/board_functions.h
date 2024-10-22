@@ -292,6 +292,8 @@ std::string square_numbers_to_letters(int square);
 bool is_promotion(Board& board, bool white_to_play, std::string move_letters);
 
 generated_moves_struct generate_moves_FEN(std::string fen);
+bool does_white_play_next(std::string fen);
+bool does_black_play_next(std::string fen);
 bool does_white_play_next(Board& board);
 bool does_black_play_next(Board& board);
 void set_white_plays_next(Board& board);

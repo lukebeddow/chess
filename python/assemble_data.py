@@ -160,14 +160,17 @@ def generate_sf_data(args):
   sf_instance.begin()
 
   gamedata = []
-  sf_only = True
+
+  # mainly for debugging, best to disable
+  save_my_moves_too = False
+  test_mine_vs_sf = False
 
   tstart = time.time()
 
   # loop over the dataset and create the data structure
   for num, line in enumerate(rand_pos):
 
-    if args.log_level >= 2 or (args.log_level == 1 and num % 10 == 1):
+    if args.log_level >= 2 or (args.log_level == 1 and num % 10 == 0):
       print(f"Preparing position {num + 1} / {num_rand}", flush=True)
 
     # extract the fen string CHECK THIS IS ALWAYS SUITABLE
@@ -175,37 +178,65 @@ def generate_sf_data(args):
 
     # get the stockfish evaluations
     sfmoves = sf_instance.generate_moves(fen)
-    sf_eval = sfmoves[0].move_eval
-    print(f"The number of stockfish moves is {len(sfmoves)}")
 
-    # if not sf_only:
-    #   # get my evaluation
-    #   gen_moves_struct = bf.generate_moves_FEN(fen)
-    #   my_moves = gen_moves_struct.moves
-    #   my_eval = gen_moves_struct.base_evaluation # before move generation
+    # check if there are no legal moves in the position
+    if len(sfmoves) == 0:
+      sf_eval = "mate"
+    else:
+      sf_eval = sfmoves[0].move_eval
 
     # save the data in python-only format
     sf_move_data = []
-    print(f"The number of sfmoves is {len(sfmoves)}")
     for i, m in enumerate(sfmoves):
       if i == 0: sf_eval = m.move_eval
       new_move = Move(m.move_letters, m.move_eval, m.depth_evaluated, i)
       sf_move_data.append(new_move)
 
-    # if not sf_only:
-    #   my_move_data = []
-    #   for i, m in enumerate(my_moves):
-    #     new_move = Move(m.to_letters(), m.evaluation, 1, i)
-    #     my_move_data.append(new_move)
-
     # now add to the overall gamedata
     new_position = Position(fen, sf_eval, sf_move_data)
 
-    # print(new_position.move_vector)
+    if args.log_level >= 2:
+      print(f"The number of stockfish moves is {len(sfmoves)}")
+
+    # do we process the board with my engine as well (depth=1)
+    if save_my_moves_too or test_mine_vs_sf:
+
+      gen_moves_struct = bf.generate_moves_FEN(fen)
+      my_moves = gen_moves_struct.get_moves()
+      my_eval = gen_moves_struct.get_evaluation() # base board evaluation
+
+      my_move_data = []
+      for i, m in enumerate(my_moves):
+        new_move = Move(m.to_letters(), m.get_evaluation(), 1, i)
+        my_move_data.append(new_move)
+
+      if len(sfmoves) != len(my_move_data):
+        print(f"generate_sf_data() warning: length of stockfish moves ({len(sfmoves)}) != length of my moves ({len(my_move_data)})")
+      elif args.log_level >= 2:
+        print(f"Both stockfish and my method found the same number of moves, n = {len(sfmoves)}")
+
+      if save_my_moves_too:
+        new_position_mine = Position(fen, my_eval, my_move_data)
+        new_position = [new_position, new_position_mine]
+      
+      found = np.zeros(len(sfmoves))
+      if test_mine_vs_sf:
+        for a in range(len(sfmoves)):
+          for b in range(len(my_move_data)):
+            if sfmoves[a].move_letters == my_move_data[b].move_letters:
+              found[a] = 1
+        # if every move has not been found in both vectors
+        if not found.all():
+          print(f"generate_sf_data() warning: Number of moves not found as identical in both stockfish and my method = {len(sfmoves) - np.sum(found):.0f}")
+        elif args.log_level >= 2:
+          print(f"Stockfish and my method moves were confirmed as identical")
+
+      # # for debugging
+      # print(f"My method found {len(my_move_data)} moves:")
+      # for i in range(len(my_move_data)):
+      #   print(my_move_data[i])
     
-    # if not sf_only:
-    #   new_position_mine = Position(fen, my_eval, my_move_data)
-    #   new_position = [new_position, new_position_mine]
+    # print(new_position.move_vector)
 
     gamedata.append(new_position)
 
@@ -231,13 +262,17 @@ if __name__ == "__main__":
   parser.add_argument("--target-depth", type=int, default=20)       # stockfish target depth for evaluations
   parser.add_argument("--data-file", default="ficsgamesdb_2023_standard2000_nomovetimes.txt") # data file for stockfish generation
   parser.add_argument("--use-depth-search", action="store_true")    # use depth search for my engine
-  parser.add_argument("--log-level", type=int, default=2)           # how much debug printing to do
+  parser.add_argument("--log-level", type=int, default=1)           # how much debug printing to do
   parser.add_argument("--random-seed", type=int, default=None)      # random seed for data generation
 
   args = parser.parse_args()
-
-  if args.evaluate_engine:
-    evaluate_engine(args)
   
   if args.generate_data:
     generate_sf_data(args)
+
+  elif args.evaluate_engine:
+    evaluate_engine(args)
+
+  else:
+    print("assemble_data.py error: expected either --generate-data or --evaluate-engine")
+    parser.print_usage()

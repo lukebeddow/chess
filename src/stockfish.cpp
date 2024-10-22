@@ -145,7 +145,7 @@ std::vector<StockfishMove> StockfishWrapper::generate_moves(std::string fen)
 {
   /* generate moves for a given position using stockfish */
 
-  bool printout = true;
+  bool printout = false;
 
   std::chrono::time_point<std::chrono::steady_clock> start_, end_;
   start_ = std::chrono::steady_clock::now();
@@ -154,7 +154,7 @@ std::vector<StockfishMove> StockfishWrapper::generate_moves(std::string fen)
   os << "position fen " << fen << std::endl;
 
   // determine whether to evaluate with depth or time
-  if (exact_time > 1) {
+  if (exact_time > 0) {
     os << "go movetime " << exact_time << std::endl;
   }
   else {
@@ -184,6 +184,28 @@ std::vector<StockfishMove> StockfishWrapper::generate_moves(std::string fen)
       std::cout << "About to read best moves at depth " << target_depth << "\n";
     }
     moves = read_best_at_depth(target_depth);
+  }
+
+  // sort the moves to guarantee they go from best to worst
+  if (moves.size() > 1) {
+    bool white_to_play = does_white_play_next(fen);
+    if (not white_to_play) { // sort from -ve (good for black) to +ve
+      std::sort(moves.begin(), moves.end());
+    }
+    else { // sort from +ve (good for white) to -ve
+      std::sort(moves.begin(), moves.end(), [](StockfishMove& a, StockfishMove& b)
+                                              { return b < a; });
+    }
+  }
+
+  // for debugging
+  // std::cout << "FEN: " << fen << "\n";
+  // Board board = FEN_to_board(fen);
+  // print_board(board);
+
+  // make sure the ranking is correct
+  for (int i = 0; i < moves.size(); i++) {
+    moves[i].move_placement = i;
   }
 
   if (printout) {
