@@ -36,6 +36,7 @@ struct StockfishWrapper {
   int num_threads = 1;    // number of cpu threads
   int num_lines = 200;      // number of best move lines to output
   int elo_value = 0;      // set 0 to disable limiting, min=1320, max=3190
+  int hash_size = 100;    // size of hash table in MB
 
   // functions
   void begin();

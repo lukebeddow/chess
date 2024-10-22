@@ -15,6 +15,7 @@ void StockfishWrapper::begin()
   // input settings
   os << "setoption name Threads value " << num_threads << std::endl;
   os << "setoption name MultiPV value " << num_lines << std::endl;
+  os << "setoption name Hash value " << hash_size << std::endl;
 
   // set a specific elo (min: 1320, max:3190)
   if (elo_value != 0) {
@@ -91,9 +92,10 @@ std::vector<StockfishMove> StockfishWrapper::read_best_at_depth(int depth)
       if (line_words[0] == "info" and line_words[1] == "depth") {
 
         int new_depth = std::stoi(line_words[2]);
-        if (new_depth > depth) {
-          depth = new_depth;
-        }
+
+        // if (new_depth > depth) {
+        //   depth = new_depth;
+        // }
 
         if (new_depth == depth) {
 
@@ -103,6 +105,16 @@ std::vector<StockfishMove> StockfishWrapper::read_best_at_depth(int depth)
           m.move_eval = std::stoi(line_words[9]);
           m.depth_evaluated = depth;
           m.move_placement = moves.size() + 1;
+
+          // check to make sure this move is not already there
+          bool repeat = false;
+          for (int i = 0; i < moves.size(); i++) {
+            if (moves[i].move_letters == m.move_letters) {
+              repeat = true;
+              break;
+            }
+          }
+          if (repeat) continue;
           moves.push_back(m);
 
         }
@@ -111,7 +123,7 @@ std::vector<StockfishMove> StockfishWrapper::read_best_at_depth(int depth)
         }
       }
     }
-    else if (line_words.size() > 1) {
+    else if (line_words.size() > 0) {
       if (line_words[0] == "bestmove") {
         break;
       }
@@ -133,7 +145,7 @@ std::vector<StockfishMove> StockfishWrapper::generate_moves(std::string fen)
 {
   /* generate moves for a given position using stockfish */
 
-  bool printout = false;
+  bool printout = true;
 
   std::chrono::time_point<std::chrono::steady_clock> start_, end_;
   start_ = std::chrono::steady_clock::now();

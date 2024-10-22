@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from collections import namedtuple
 import time
 import argparse
+import numpy as np
+from scipy.stats import spearmanr
 
 Move = namedtuple("Move",
                   ("move_letters", "eval", "depth", "ranking"))
@@ -24,7 +26,32 @@ def get_ranking_difference(my_moves, sf_moves):
   """
   Determine the spearman rank coefficient between the move rankings
   """
-  pass
+
+  if (len(my_moves) != len(sf_moves)):
+    print(f"Spearman ranking failed, lengths are different. my_moves length = {len(my_moves)}, sf_moves length = {len(sf_moves)}")
+    if len(my_moves) > len(sf_moves):
+      sf_moves = sf_moves[:len(my_moves)]
+    else:
+      my_moves = my_moves[:len(sf_moves)]
+  
+  # get the moves into relative orders, taking stockfish as ground truth
+  sf_rank = list(range(len(sf_moves)))
+
+  my_rank = []
+  for move in my_moves:
+    for i in range(len(sf_moves)):
+      if move.move_letters.lower() == sf_moves[i].move_letters.lower():
+        my_rank.append(i)
+  
+  # convert into numpy arrays
+  sf_np = np.array(sf_rank)
+  my_np = np.array(my_rank)
+
+  rank = spearmanr(sf_np, my_np)
+
+  print(f"The spearman rank score is {rank}")
+
+  return rank
 
 def evaluate_engine(args):
   """
@@ -74,8 +101,14 @@ def evaluate_engine(args):
     eval_difference = abs(sf_eval - my_eval)
     avg_eval_difference += eval_difference
 
+    print(my_moves)
+    print(sf_moves)
+
+    rank = get_ranking_difference(my_moves=my_moves, sf_moves=sf_moves)
+
     if args.log_level >= 2:
-      print(f"Position {i + 1}/{num_rand}, eval_difference = {eval_difference}, sf best move = {sf_moves[0].move_letters} (eval={sf_moves[0].eval}, depth={sf_moves[0].depth}), my best move = {my_moves[0].move_letters} (eval={my_moves[0].eval}, depth={my_moves[0].depth})")
+      print(f"Position {i + 1}/{num_rand}, eval_difference = {eval_difference}, sf best move = {sf_moves[0].move_letters} (eval={sf_moves[0].eval}, depth={sf_moves[0].depth}), my best move = {my_moves[0].move_letters} (eval={my_moves[0].eval}, depth={my_moves[0].depth})",
+            flush=True)
 
   # determine the average difference in evaluations
   avg_eval_difference /= len(pydata)
@@ -94,6 +127,9 @@ def generate_sf_data(args):
   filepath = "./data/"
   filename = "ficsgamesdb_2023_standard2000_nomovetimes_400127.txt"
   filename = args.data_file
+
+  if args.log_level >= 1:
+    print(f"Preparing to generate data from file: {filepath + filename}")
 
   # read in the text data
   with open(filepath + filename, "r") as f:
@@ -120,7 +156,7 @@ def generate_sf_data(args):
   sf_instance = sf.StockfishWrapper()
   sf_instance.target_depth = 20
   sf_instance.num_lines = 200
-  sf_instance.num_threads = 1
+  sf_instance.num_threads = args.num_threads
   sf_instance.begin()
 
   gamedata = []
@@ -132,7 +168,7 @@ def generate_sf_data(args):
   for num, line in enumerate(rand_pos):
 
     if args.log_level >= 2 or (args.log_level == 1 and num % 10 == 1):
-      print(f"Preparing position {num + 1} / {num_rand}")
+      print(f"Preparing position {num + 1} / {num_rand}", flush=True)
 
     # extract the fen string CHECK THIS IS ALWAYS SUITABLE
     fen = line.split(" c0 ")[0]
@@ -142,31 +178,34 @@ def generate_sf_data(args):
     sf_eval = sfmoves[0].move_eval
     print(f"The number of stockfish moves is {len(sfmoves)}")
 
-    if not sf_only:
-      # get my evaluation
-      gen_moves_struct = bf.generate_moves_FEN(fen)
-      my_moves = gen_moves_struct.moves
-      my_eval = gen_moves_struct.base_evaluation # before move generation
+    # if not sf_only:
+    #   # get my evaluation
+    #   gen_moves_struct = bf.generate_moves_FEN(fen)
+    #   my_moves = gen_moves_struct.moves
+    #   my_eval = gen_moves_struct.base_evaluation # before move generation
 
     # save the data in python-only format
     sf_move_data = []
+    print(f"The number of sfmoves is {len(sfmoves)}")
     for i, m in enumerate(sfmoves):
       if i == 0: sf_eval = m.move_eval
       new_move = Move(m.move_letters, m.move_eval, m.depth_evaluated, i)
       sf_move_data.append(new_move)
 
-    if not sf_only:
-      my_move_data = []
-      for i, m in enumerate(my_moves):
-        new_move = Move(m.to_letters(), m.evaluation, 1, i)
-        my_move_data.append(new_move)
+    # if not sf_only:
+    #   my_move_data = []
+    #   for i, m in enumerate(my_moves):
+    #     new_move = Move(m.to_letters(), m.evaluation, 1, i)
+    #     my_move_data.append(new_move)
 
     # now add to the overall gamedata
     new_position = Position(fen, sf_eval, sf_move_data)
+
+    # print(new_position.move_vector)
     
-    if not sf_only:
-      new_position_mine = Position(fen, my_eval, my_move_data)
-      new_position = [new_position, new_position_mine]
+    # if not sf_only:
+    #   new_position_mine = Position(fen, my_eval, my_move_data)
+    #   new_position = [new_position, new_position_mine]
 
     gamedata.append(new_position)
 
@@ -188,6 +227,8 @@ if __name__ == "__main__":
   parser.add_argument("--evaluate-engine", action="store_true")     # compare my engine against stockfish
   parser.add_argument("--generate-data", action="store_true")       # generate stockfish data
   parser.add_argument("--num-rand", type=int, default=10)           # number of random samples
+  parser.add_argument("--num-threads", type=int, default=1)         # number of cpu threads to allocate to stockfish
+  parser.add_argument("--target-depth", type=int, default=20)       # stockfish target depth for evaluations
   parser.add_argument("--data-file", default="ficsgamesdb_2023_standard2000_nomovetimes.txt") # data file for stockfish generation
   parser.add_argument("--use-depth-search", action="store_true")    # use depth search for my engine
   parser.add_argument("--log-level", type=int, default=2)           # how much debug printing to do
