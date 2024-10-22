@@ -40,7 +40,7 @@ faketty() {
 
 PY_ARGS=() # arguments passed directly into python without parsing
 LOGGING='Y' # logging enabled by default
-NUM_RAND=4069 # default number of positions to generate for
+NUM_RAND=4096 # default number of positions to generate for
 
 # loop through input args, look for script specific arguments
 for (( i = 1; i <= "$#"; i++ ));
