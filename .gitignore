@@ -7,3 +7,5 @@ build
 data/
 stockfish/
 gamedata/
+gmon.out
+profile.txt

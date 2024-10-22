@@ -34,6 +34,12 @@ else
 DEBUG = -O2
 endif
 
+ifeq ($(filter profile, $(MAKECMDGOALS)), profile)
+DEBUG = -O0 -pg
+else
+DEBUG = -O2
+endif
+
 # define python location (if no source in venv, use: ln -s /usr/include/python3.8/ /home/path/to/env/name/include/python3.8)
 PYTHON = /home/luke/pyenv/py38_general
 PYTHON_EXE = $(PYTHON)/bin/python
@@ -88,6 +94,9 @@ test:
 
 .PHONY: debug
 debug: cpp
+
+.PHONY: profile
+profile: cpp
 
 # build object files
 $(CPPSHAREDOBJ): $(BUILDCPP)/%.o : $(SOURCEDIR)/%.cpp

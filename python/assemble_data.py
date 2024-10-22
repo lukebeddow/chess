@@ -140,6 +140,7 @@ def generate_sf_data(args):
     # get the stockfish evaluations
     sfmoves = sf_instance.generate_moves(fen)
     sf_eval = sfmoves[0].move_eval
+    print(f"The number of stockfish moves is {len(sfmoves)}")
 
     if not sf_only:
       # get my evaluation
@@ -187,7 +188,7 @@ if __name__ == "__main__":
   parser.add_argument("--evaluate-engine", action="store_true")     # compare my engine against stockfish
   parser.add_argument("--generate-data", action="store_true")       # generate stockfish data
   parser.add_argument("--num-rand", type=int, default=10)           # number of random samples
-  parser.add_argument("--data-file", default="ficsgamesdb_2023_standard2000_nomovetimes_400127.txt") # data file for stockfish generation
+  parser.add_argument("--data-file", default="ficsgamesdb_2023_standard2000_nomovetimes.txt") # data file for stockfish generation
   parser.add_argument("--use-depth-search", action="store_true")    # use depth search for my engine
   parser.add_argument("--log-level", type=int, default=2)           # how much debug printing to do
   parser.add_argument("--random-seed", type=int, default=None)      # random seed for data generation
