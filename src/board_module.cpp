@@ -69,6 +69,7 @@ PYBIND11_MODULE(board_module, m) {
 
     // expose only functions we want to be usable from python
     m.def("generate_moves_FEN", &generate_moves_FEN);
+    m.def("print_FEN_board", &print_FEN_board);
 
     // functions that use the board struct
     // m.def("create_board", py::overload_cast<>(&create_board));

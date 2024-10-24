@@ -349,7 +349,7 @@ bool check_board(Board& board)
     return true;
 }
 
-// TESTING declare early, no definition
+// declare early, no definition yet
 int is_passed_pawn(Board& board, int our_colour, int square_num);
 
 void print_board(Board& board, bool neat) {
@@ -1435,7 +1435,7 @@ int find_pins_checks(Board& board, bool& check, bool& pin, int king_index,
             if (board.arr[line_sq] == BoardSq::yes or
                 board.arr[line_sq] == BoardSq::no) break;
             // if the line square is empty
-            else if (board.arr[line_sq] == 0) {
+            else if (board.arr[line_sq] == BoardSq::empty) {
                 // then the square is along the pin/check line
                 move_set.push_back(line_sq);
             }
@@ -1445,13 +1445,11 @@ int find_pins_checks(Board& board, bool& check, bool& pin, int king_index,
                 move_set.push_back(line_sq);
                 break;
             }
-            // if we reach the piece that is pinned
-            else if (maybe_pin and board.arr[line_sq] * player_colour > 0) {
+            // if we see any pieces along the way (>1 means not a pin)
+            else if (maybe_pin and board.arr[line_sq] != BoardSq::empty) {
                 pinned_piece.push_back(line_sq);
-                // testing-----------
                 pinned_moves.push_back(0);
                 pinned_moves.push_back(line_sq);
-                //-------------------
                 num_pinned += 1;
             }
         }
@@ -1474,17 +1472,12 @@ int find_pins_checks(Board& board, bool& check, bool& pin, int king_index,
                     move_set.end());
             }
             // if we found two pinned pieces, it is not a pin at all
-            /* the cause of this error is not clear, but I believe it arises
-            * from bishops/queens along the same diagonal as a king being then
-            * pinned by a piece */
             else if (num_pinned > 1) {
                 // remove the pinned pieces we thought we had
                 while (num_pinned > 0) {
                     pinned_piece.pop_back();
-                    // testing------------------
                     pinned_moves.pop_back();
                     pinned_moves.pop_back();
-                    // -------------------------
                     num_pinned -= 1;
                 }
             }
@@ -2927,17 +2920,38 @@ total_legal_moves_struct total_legal_moves(Board& board, bool white_to_play) {
                             continue;
                         }
                     }
+
                     // if our king is in check
                     if (check) {
                         // only a block or capture of checking piece is legal
                         if (not (is_in(block_check, attack_sq))) {
+
+                            // the only exception is an enpassant capture
+                            // if white to play, we are looking at a black pawn move
+                            int en_pass_bool = (not white_to_play ?
+                                                    53 - attack_sq
+                                                  : 91 - attack_sq);
+                            int target_rank = (not white_to_play ? 4 : 7);
+                            int pawn_square = attack_sq - 10 * player_colour;
+
+                            // check if an en passant capture is possible
+                            if (attack_sq / 10 == target_rank and
+                                board.arr[en_pass_bool] == BoardSq::yes and
+                                board.arr[attack_sq] == BoardSq::empty and
+                                board.arr[pawn_square] == -1 * player_colour * BoardSq::wP) {
+                                move_mod = MoveMod::captureEnPassant;
+                                data_array.legal_moves.push_back(ind);
+                                data_array.legal_moves.push_back(attack_sq);
+                                data_array.legal_moves.push_back(move_mod);
+                            }
+
                             continue;
                         }
                     }
                     // hence, any piece we attack allows us to move to that square
                     if (attack_mod == -1) {
                         // if the destination square is empty, it is en passant
-                        if (board.arr[attack_sq] == 0) {
+                        if (board.arr[attack_sq] == BoardSq::empty) {
                             move_mod = MoveMod::captureEnPassant;
                             data_array.legal_moves.push_back(ind);
                             data_array.legal_moves.push_back(attack_sq);
@@ -2975,10 +2989,9 @@ total_legal_moves_struct total_legal_moves(Board& board, bool white_to_play) {
                 // now check if this pawn can move forwards normally
 
                 // if the square ahead of us is empty, we can move there
-                if (board.arr[ind + pawn_move] == 0 and
+                if (board.arr[ind + pawn_move] == BoardSq::empty and
                     (not check or is_in(block_check, ind + pawn_move)) and
-                    not (i_am_pinned and
-                        not (is_in(pinned_moves, ind + pawn_move)))) {
+                     not (i_am_pinned and not (is_in(my_pinned_moves, ind + pawn_move)))) {
                     // is this move a promotion
                     if ((ind + pawn_move) / 10 == pawn_promote) {
                         // move_mod = 6: promote to knight
@@ -3008,11 +3021,11 @@ total_legal_moves_struct total_legal_moves(Board& board, bool white_to_play) {
                 }
                 // if we haven't moved yet, we may be able to move two spaces
                 if (ind / 10 == pawn_start and
-                    board.arr[ind + pawn_move] == 0 and
-                    board.arr[ind + 2 * pawn_move] == 0 and
+                    board.arr[ind + pawn_move] == BoardSq::empty and
+                    board.arr[ind + 2 * pawn_move] == BoardSq::empty and
                     (not check or is_in(block_check, ind + 2 * pawn_move)) and
                     not (i_am_pinned and
-                        not (is_in(pinned_moves, ind + 2 * pawn_move)))) {
+                        not (is_in(my_pinned_moves, ind + 2 * pawn_move)))) {
                     move_mod = MoveMod::moveToEmpty;
                     data_array.legal_moves.push_back(ind);
                     data_array.legal_moves.push_back(ind + 2 * pawn_move);
@@ -3967,4 +3980,17 @@ Board FEN_to_board(std::string fen)
     if (debug) std::cout << "Finished FEN function\n";
 
     return board;
+}
+
+void print_FEN_board(std::string fen)
+{
+    /* print a board from an FEN string */
+
+    Board board = FEN_to_board(fen);
+
+    #if defined(LUKE_PYBIND)
+        py_print_board(board);
+    #else
+        print_board(board);
+    #endif
 }

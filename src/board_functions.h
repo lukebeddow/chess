@@ -274,6 +274,7 @@ struct generated_moves_struct {
 Board create_board(bool pieces = true);
 Board create_board(std::vector<std::string> moves);
 Board FEN_to_board(std::string fen);
+void print_FEN_board(std::string fen);
 bool check_board(Board& board);
 void print_board(Board& board);
 void print_board(Board& board, bool tidy);
