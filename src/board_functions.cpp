@@ -3830,6 +3830,12 @@ void wipe_any_plays_next(Board& board) {
     board.arr[BoardInd::blackPlaysNext] = BoardSq::no;
 }
 
+bool is_white_next_FEN(std::string fen)
+{
+    Board board = FEN_to_board(fen);
+    return does_white_play_next(board);
+}
+
 Board FEN_to_board(std::string fen)
 {
     /* convert from FEN notation to a board state */
@@ -3993,4 +3999,106 @@ void print_FEN_board(std::string fen)
     #else
         print_board(board);
     #endif
+}
+
+BoardVectors FEN_to_board_vectors(std::string fen)
+{
+    /* convert an FEN string into a numpy style board */
+
+    Board board = FEN_to_board(fen);
+    BoardVectors board_vec;
+
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+
+            int ind = (i * 10 + 20) + (j + 1);
+            int here = board.arr[ind];
+
+            int vecind = (i * 8) + j;
+
+            switch (here) {
+            case BoardSq::wP: {
+                board_vec.wP[vecind] = 1;
+                break;
+            }
+            case BoardSq::wN: {
+                board_vec.wN[vecind] = 1;
+                break;
+            }
+            case BoardSq::wB: {
+                board_vec.wB[vecind] = 1;
+                break;
+            }
+            case BoardSq::wR: {
+                board_vec.wR[vecind] = 1;
+                break;
+            }
+            case BoardSq::wQ: {
+                board_vec.wQ[vecind] = 1;
+                break;
+            }
+            case BoardSq::wK: {
+                board_vec.wK[vecind] = 1;
+                break;
+            }
+            case BoardSq::bP: {
+                board_vec.bP[vecind] = 1;
+                break;
+            }
+            case BoardSq::bN: {
+                board_vec.bN[vecind] = 1;
+                break;
+            }
+            case BoardSq::bB: {
+                board_vec.bB[vecind] = 1;
+                break;
+            }
+            case BoardSq::bR: {
+                board_vec.bR[vecind] = 1;
+                break;
+            }
+            case BoardSq::bQ: {
+                board_vec.bQ[vecind] = 1;
+                break;
+            }
+            case BoardSq::bK: {
+                board_vec.bK[vecind] = 1;
+                break;
+            }
+            }
+        }
+    }
+
+    // fill in castle rights as static vectors
+    if (board.arr[BoardInd::castleWK] == BoardSq::yes) {
+        for (int i = 0; i < board_vec.wKS.size(); i++) {
+            board_vec.wKS[i] = 1;
+        }
+    }
+    if (board.arr[BoardInd::castleWQ] == BoardSq::yes) {
+        for (int i = 0; i < board_vec.wQS.size(); i++) {
+            board_vec.wQS[i] = 1;
+        }
+    }
+    if (board.arr[BoardInd::castleBK] == BoardSq::yes) {
+        for (int i = 0; i < board_vec.bKS.size(); i++) {
+            board_vec.bKS[i] = 1;
+        }
+    }
+    if (board.arr[BoardInd::castleBQ] == BoardSq::yes) {
+        for (int i = 0; i < board_vec.bQS.size(); i++) {
+            board_vec.bQS[i] = 1;
+        }
+    }
+
+    // fill in player colour
+    if (board.arr[BoardInd::whitePlaysNext] == BoardSq::yes) {
+        for (int i = 0; i < board_vec.colour.size(); i++) {
+            board_vec.colour[i] = 1;
+        }
+    }
+
+    // no logic for total moves, or no take ply currently
+
+    return board_vec;
 }

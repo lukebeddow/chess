@@ -251,6 +251,28 @@ struct generated_moves_struct {
     bool is_mating_move() { return mating_move; }
 };
 
+struct BoardVectors {
+    std::vector<int> wP = std::vector<int>(64);
+    std::vector<int> wN = std::vector<int>(64);
+    std::vector<int> wB = std::vector<int>(64); 
+    std::vector<int> wR = std::vector<int>(64); 
+    std::vector<int> wQ = std::vector<int>(64); 
+    std::vector<int> wK = std::vector<int>(64); 
+    std::vector<int> bP = std::vector<int>(64); 
+    std::vector<int> bN = std::vector<int>(64); 
+    std::vector<int> bB = std::vector<int>(64); 
+    std::vector<int> bR = std::vector<int>(64); 
+    std::vector<int> bQ = std::vector<int>(64); 
+    std::vector<int> bK = std::vector<int>(64); 
+    std::vector<int> wKS = std::vector<int>(64);
+    std::vector<int> wQS = std::vector<int>(64);
+    std::vector<int> bKS = std::vector<int>(64);
+    std::vector<int> bQS = std::vector<int>(64);
+    std::vector<int> colour = std::vector<int>(64);
+    std::vector<int> total_moves = std::vector<int>(64);
+    std::vector<int> no_take_ply = std::vector<int>(64);
+};
+
 //struct {
 //    //              A  B  C  D  E  F  G  H
 //    int[64] pawn ={ 1, 2, 3, 4, 5, 6, 7, 8,    // 1
@@ -266,15 +288,17 @@ struct generated_moves_struct {
 
 /* Functions */
 
+// #define LUKE_PYBIND
+
 #if defined(LUKE_PYBIND)
     void py_print_board(Board& board, bool neat);
     void py_print_board(Board& board);
 #endif
 
+
+
 Board create_board(bool pieces = true);
 Board create_board(std::vector<std::string> moves);
-Board FEN_to_board(std::string fen);
-void print_FEN_board(std::string fen);
 bool check_board(Board& board);
 void print_board(Board& board);
 void print_board(Board& board, bool tidy);
@@ -300,5 +324,11 @@ bool does_black_play_next(Board& board);
 void set_white_plays_next(Board& board);
 void set_black_plays_next(Board& board);
 void wipe_any_plays_next(Board& board);
+
+// exposed to python
+Board FEN_to_board(std::string fen);
+void print_FEN_board(std::string fen);
+BoardVectors FEN_to_board_vectors(std::string fen);
+bool is_white_next_FEN(std::string fen);
 
 #endif

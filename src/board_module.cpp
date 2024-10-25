@@ -64,12 +64,36 @@ PYBIND11_MODULE(board_module, m) {
         .def("does_game_continue", &generated_moves_struct::does_game_continue)
         .def("get_length", &generated_moves_struct::get_length)
         .def("is_mating_move", &generated_moves_struct::is_mating_move)
-        
+        ;
+
+    py::class_<BoardVectors>(m, "BoardVectors")
+        .def(py::init<>())
+        .def_readwrite("wP", &BoardVectors::wP)
+        .def_readwrite("wN", &BoardVectors::wN)
+        .def_readwrite("wB", &BoardVectors::wB)
+        .def_readwrite("wR", &BoardVectors::wR)
+        .def_readwrite("wQ", &BoardVectors::wQ)
+        .def_readwrite("wK", &BoardVectors::wK)
+        .def_readwrite("bP", &BoardVectors::bP)
+        .def_readwrite("bN", &BoardVectors::bN)
+        .def_readwrite("bB", &BoardVectors::bB)
+        .def_readwrite("bR", &BoardVectors::bR)
+        .def_readwrite("bQ", &BoardVectors::bQ)
+        .def_readwrite("bK", &BoardVectors::bK)
+        .def_readwrite("wKS", &BoardVectors::wKS)
+        .def_readwrite("wQS", &BoardVectors::wQS)
+        .def_readwrite("bKS", &BoardVectors::bKS)
+        .def_readwrite("bQS", &BoardVectors::bQS)
+        .def_readwrite("colour", &BoardVectors::colour)
+        .def_readwrite("total_moves", &BoardVectors::total_moves)
+        .def_readwrite("no_take_ply", &BoardVectors::no_take_ply)
         ;
 
     // expose only functions we want to be usable from python
     m.def("generate_moves_FEN", &generate_moves_FEN);
     m.def("print_FEN_board", &print_FEN_board);
+    m.def("FEN_to_board_vectors", &FEN_to_board_vectors);
+    m.def("is_white_next_FEN", &is_white_next_FEN);
 
     // functions that use the board struct
     // m.def("create_board", py::overload_cast<>(&create_board));
