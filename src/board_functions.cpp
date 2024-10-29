@@ -4001,11 +4001,46 @@ void print_FEN_board(std::string fen)
     #endif
 }
 
+BoardVectors FEN_and_move_to_board_vectors(std::string fen, std::string move_str)
+{
+    /* take an FEN string, play a given move on the board, and then convert the
+    resultant board into a board vector */
+    
+    Board board = FEN_to_board(fen);
+    bool white_to_play = does_white_play_next(board);
+    verified_move move = verify_move(board, white_to_play, move_str);
+
+    if (move.move_mod == -1) {
+        print_board(board);
+        std::cout << "Illegal move was: " << move_str << "\n";
+        throw std::runtime_error("FEN_and_move_to_board_vectors() error: move illegal on board");
+    }
+
+    // make the move on the board
+    make_move(board, move.start_sq, move.dest_sq, move.move_mod);
+
+    // alternate who plays next (which is NOT handled by make_move(...))
+    if (white_to_play) {
+        set_black_plays_next(board);
+    }
+    else {
+        set_white_plays_next(board);
+    }
+
+    // convert the new board into a board vector
+    return board_to_vectors(board);
+}
+
 BoardVectors FEN_to_board_vectors(std::string fen)
+{
+    Board board = FEN_to_board(fen);
+    return board_to_vectors(board);
+}
+
+BoardVectors board_to_vectors(Board& board)
 {
     /* convert an FEN string into a numpy style board */
 
-    Board board = FEN_to_board(fen);
     BoardVectors board_vec;
 
     for (int i = 0; i < 8; i++) {

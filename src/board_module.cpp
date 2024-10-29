@@ -94,6 +94,7 @@ PYBIND11_MODULE(board_module, m) {
     m.def("print_FEN_board", &print_FEN_board);
     m.def("FEN_to_board_vectors", &FEN_to_board_vectors);
     m.def("is_white_next_FEN", &is_white_next_FEN);
+    m.def("FEN_and_move_to_board_vectors", &FEN_and_move_to_board_vectors);
 
     // functions that use the board struct
     // m.def("create_board", py::overload_cast<>(&create_board));

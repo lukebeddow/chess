@@ -324,11 +324,13 @@ bool does_black_play_next(Board& board);
 void set_white_plays_next(Board& board);
 void set_black_plays_next(Board& board);
 void wipe_any_plays_next(Board& board);
+BoardVectors board_to_vectors(Board& board);
 
 // exposed to python
 Board FEN_to_board(std::string fen);
 void print_FEN_board(std::string fen);
 BoardVectors FEN_to_board_vectors(std::string fen);
+BoardVectors FEN_and_move_to_board_vectors(std::string fen, std::string move_str);
 bool is_white_next_FEN(std::string fen);
 
 #endif
