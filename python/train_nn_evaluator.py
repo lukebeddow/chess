@@ -946,6 +946,8 @@ if __name__ == "__main__":
   parser.add_argument("--weight-decay", type=float, default=1e-4)         # L2 weight regularisation
   parser.add_argument("--dropout-prob", type=float, default=0.0)          # probability of a node dropping out during training
   parser.add_argument("--torch-threads", type=int, default=1)             # number of threads to allocate to pytorch, 0 to disable
+  parser.add_argument("--double-train", action="store_true")              # train on stockfish evaluations afterwards
+  parser.add_argument("--use-sf-loss", action="store_true")               # use stockfish evaluation as target
 
   args = parser.parse_args()
 
@@ -953,6 +955,9 @@ if __name__ == "__main__":
 
   run_name = f"run_{timestamp[-5:]}_A{args.job}"
   group_name = timestamp[:8]
+
+  print("Run name:", run_name)
+  print("Group name:", group_name)
 
   if args.torch_threads > 0:
     torch.set_num_threads(args.torch_threads)
@@ -973,7 +978,7 @@ if __name__ == "__main__":
   }
 
   # create the network based on 19 layer boards
-  newnet = False
+  newnet = True
   if newnet:
     in_features = 17
     out_features = 64
@@ -997,8 +1002,12 @@ if __name__ == "__main__":
 
   # check important settings!
   trainer.slice_log_rate = 5
-  trainer.use_sf_eval = True
+  trainer.use_sf_eval = args.use_sf_loss
   trainer.use_sq_eval_sum_loss = True
+
+  print(f"trainer.use_sf_eval = {trainer.use_sf_eval}")
+  print(f"Loss style is {args.loss_style}")
+  print(f"Learning rate is {args.learning_rate}")
 
   trainer.train(
     epochs=args.epochs,
@@ -1007,6 +1016,17 @@ if __name__ == "__main__":
     examine_dist=False
   )
 
+  if args.double_train:
+
+    # now train to match the stockfish evaluations
+    trainer.use_sf_eval = True
+
+    trainer.train(
+      epochs=args.epochs,
+      norm_factors=[7, 0, 2.159, None],
+      device=args.device,
+      examine_dist=False
+    )
 
   # # initiate the training procedure
   # trained_net = train_procedure(
