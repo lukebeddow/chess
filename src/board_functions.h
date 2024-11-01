@@ -252,6 +252,7 @@ struct generated_moves_struct {
 };
 
 struct BoardVectors {
+
     std::vector<int> wP = std::vector<int>(64);
     std::vector<int> wN = std::vector<int>(64);
     std::vector<int> wB = std::vector<int>(64); 
@@ -271,6 +272,9 @@ struct BoardVectors {
     std::vector<int> colour = std::vector<int>(64);
     std::vector<int> total_moves = std::vector<int>(64);
     std::vector<int> no_take_ply = std::vector<int>(64);
+
+    bool squares_evaluated = false;
+    std::vector<int> sq_evals = std::vector<int>(64);
 };
 
 //struct {
@@ -303,6 +307,7 @@ bool check_board(Board& board);
 void print_board(Board& board);
 void print_board(Board& board, bool tidy);
 // void py_print_board(Board& board);
+std::vector<int> eval_squares(Board& board, bool white_to_play);
 int eval_board(Board& board, bool white_to_play);
 total_legal_moves_struct total_legal_moves(Board& board, bool white_to_play);
 generated_moves_struct generate_moves(Board& board, bool white_to_play);
@@ -325,12 +330,16 @@ void set_white_plays_next(Board& board);
 void set_black_plays_next(Board& board);
 void wipe_any_plays_next(Board& board);
 BoardVectors board_to_vectors(Board& board);
+Board vectors_to_board(BoardVectors board_vec);
 
 // exposed to python
 Board FEN_to_board(std::string fen);
 void print_FEN_board(std::string fen);
+void print_board_vectors(BoardVectors board_vec);
 BoardVectors FEN_to_board_vectors(std::string fen);
+BoardVectors FEN_to_board_vectors_with_eval(std::string fen);
 BoardVectors FEN_and_move_to_board_vectors(std::string fen, std::string move_str);
+BoardVectors FEN_move_eval_to_board_vectors(std::string fen, std::string move_str);
 bool is_white_next_FEN(std::string fen);
 
 #endif

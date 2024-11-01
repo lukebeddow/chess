@@ -2587,6 +2587,83 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
     return evaluation * our_colour;
 }
 
+std::vector<int> eval_squares(Board& board, bool white_to_play)
+{
+    /* return the evaluation of each square on the board */
+
+    std::vector<int> sq_evals(64);
+
+    int evaluation = 0;         // the evaulation starts at zero
+    int this_eval;              // evaluation of current square
+    int index;                  // board square index
+    int vec_ind;                // sq_evals vector index
+    int piece_type;             // the type of piece
+    int piece_colour;           // the colour of the piece
+    bool mate = false;          // is it checkmate
+
+    // determine the phase of the game
+    phase_struct phase = determine_phase(board, white_to_play);
+
+    // update the evaluation based on the phase of play
+    evaluation += phase.evaluation_adjust;
+
+    // loop through every square of the board
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+
+            index = (2 + i) * 10 + (j + 1);
+            vec_ind = (i * 8) + j;
+
+            this_eval = 0;
+
+            // if the square contains a piece, find its evalution
+            if (board.arr[index] != BoardSq::empty) {
+
+                // extract the relevant information about the square
+                if (board.arr[index] < 0) {
+                    piece_type = board.arr[index] * -1;
+                    piece_colour = -1;
+                }
+                else {
+                    piece_type = board.arr[index];
+                    piece_colour = 1;
+                }
+
+                // analyse the piece
+                piece_attack_defend_struct pad_struct = piece_attack_defend(board,
+                                                   index, piece_type, piece_colour);
+
+                // evaluate the piece
+                int piece_eval = eval_piece(board, white_to_play, index,
+                    phase, piece_type, piece_colour, mate, pad_struct);
+
+                // have we found checkmate
+                if (mate) {
+                    if (white_to_play) {
+                        this_eval = WHITE_MATED;
+                    }
+                    else {
+                        this_eval = BLACK_MATED;
+                    }
+                }
+                else {
+                    this_eval = piece_eval;
+                }
+
+                //// FOR TESTING
+                //std::cout << "The piece on square " << index
+                //    << " has evaluation " << piece_eval.eval * piece_colour
+                //    << " and null eval " << piece_eval.null_eval << '\n';
+            }
+
+            // record the evaluation of this square
+            sq_evals[vec_ind] = this_eval;
+        }
+    }
+   
+    return sq_evals;
+}
+
 int eval_board(Board& board, bool white_to_play) 
 {  /* This function evalutes the board to decide who is winning */
 
@@ -2609,7 +2686,7 @@ int eval_board(Board& board, bool white_to_play)
             index = (2 + i) * 10 + (j + 1);
 
             // if the square contains a piece, find its evalution
-            if (board.arr[index] != 0) {
+            if (board.arr[index] != BoardSq::empty) {
 
                 // extract the relevant information about the square
                 if (board.arr[index] < 0) {
@@ -4001,6 +4078,19 @@ void print_FEN_board(std::string fen)
     #endif
 }
 
+void print_board_vectors(BoardVectors board_vec)
+{
+    /* print out the board represented by a board vector */
+
+    Board board = vectors_to_board(board_vec);
+
+    #if defined(LUKE_PYBIND)
+        py_print_board(board);
+    #else
+        print_board(board);
+    #endif
+}
+
 BoardVectors FEN_and_move_to_board_vectors(std::string fen, std::string move_str)
 {
     /* take an FEN string, play a given move on the board, and then convert the
@@ -4035,6 +4125,23 @@ BoardVectors FEN_to_board_vectors(std::string fen)
 {
     Board board = FEN_to_board(fen);
     return board_to_vectors(board);
+}
+
+BoardVectors FEN_to_board_vectors_with_eval(std::string fen)
+{
+    /* include an evaluation of the board square-wise as the FEN is converted */
+
+    Board board = FEN_to_board(fen);
+    bool white_to_play = does_white_play_next(board);
+
+    // convert the new board into a board vector
+    BoardVectors board_vec = board_to_vectors(board);
+
+    // add in the evaluation
+    board_vec.sq_evals = eval_squares(board, white_to_play);
+    board_vec.squares_evaluated = true;
+
+    return board_vec;
 }
 
 BoardVectors board_to_vectors(Board& board)
@@ -4134,6 +4241,118 @@ BoardVectors board_to_vectors(Board& board)
     }
 
     // no logic for total moves, or no take ply currently
+
+    return board_vec;
+}
+
+Board vectors_to_board(BoardVectors board_vec)
+{
+    /* convert an FEN string into a numpy style board */
+
+    // create a board without the pieces
+    Board board = create_board(false);
+
+    // loop over the squares of the actual board and place any pieces
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+
+            // index in the board array
+            int ind = (i * 10 + 20) + (j + 1);
+            int here = board.arr[ind];
+
+            // index in the board vectors
+            int vecind = (i * 8) + j;
+
+            // check every board vector to see if a piece is there
+            if (board_vec.wP[vecind]) {
+                board.arr[ind] = BoardSq::wP;
+            }
+            else if (board_vec.wN[vecind]) {
+                board.arr[ind] = BoardSq::wN;
+            }
+            else if (board_vec.wB[vecind]) {
+                board.arr[ind] = BoardSq::wB;
+            }
+            else if (board_vec.wR[vecind]) {
+                board.arr[ind] = BoardSq::wR;
+            }
+            else if (board_vec.wQ[vecind]) {
+                board.arr[ind] = BoardSq::wQ;
+            }
+            else if (board_vec.wK[vecind]) {
+                board.arr[ind] = BoardSq::wK;
+            }
+            else if (board_vec.bP[vecind]) {
+                board.arr[ind] = BoardSq::bP;
+            }
+            else if (board_vec.bN[vecind]) {
+                board.arr[ind] = BoardSq::bN;
+            }
+            else if (board_vec.bB[vecind]) {
+                board.arr[ind] = BoardSq::bB;
+            }
+            else if (board_vec.bR[vecind]) {
+                board.arr[ind] = BoardSq::bR;
+            }
+            else if (board_vec.bQ[vecind]) {
+                board.arr[ind] = BoardSq::bQ;
+            }
+            else if (board_vec.bK[vecind]) {
+                board.arr[ind] = BoardSq::bK;
+            }
+        }
+    }
+
+    // now assign castle rights
+    if (board_vec.wKS[0]) board.arr[BoardInd::castleWK] = BoardSq::yes;
+    if (board_vec.wQS[0]) board.arr[BoardInd::castleWQ] = BoardSq::yes;
+    if (board_vec.bKS[0]) board.arr[BoardInd::castleBK] = BoardSq::yes;
+    if (board_vec.bQS[0]) board.arr[BoardInd::castleBQ] = BoardSq::yes;
+
+    // assign player colour
+    if (board_vec.colour[0]) {
+        set_white_plays_next(board);
+    }
+    else {
+        set_black_plays_next(board);
+    }
+
+    // no logic for total moves, or no take ply currently
+
+    return board;
+}
+
+BoardVectors FEN_move_eval_to_board_vectors(std::string fen, std::string move_str)
+{
+    /* create board vectors from a move and an FEN string, also evalaute each square */
+
+    Board board = FEN_to_board(fen);
+    bool white_to_play = does_white_play_next(board);
+    verified_move move = verify_move(board, white_to_play, move_str);
+
+    if (move.move_mod == -1) {
+        print_board(board);
+        std::cout << "Illegal move was: " << move_str << "\n";
+        throw std::runtime_error("FEN_and_move_to_board_vectors() error: move illegal on board");
+    }
+
+    // make the move on the board
+    make_move(board, move.start_sq, move.dest_sq, move.move_mod);
+
+    // alternate who plays next (which is NOT handled by make_move(...))
+    if (white_to_play) {
+        set_black_plays_next(board);
+    }
+    else {
+        set_white_plays_next(board);
+    }
+
+    // convert the new board into a board vector
+    BoardVectors board_vec = board_to_vectors(board);
+
+    // add in the evaluation
+    board_vec.sq_evals = eval_squares(board, white_to_play);
+    board_vec.squares_evaluated = true;
 
     return board_vec;
 }

@@ -10,11 +10,10 @@ import time
 import argparse
 import numpy as np
 from math import floor, ceil
+from datetime import datetime
 
 import torch
 import torch.nn as nn
-
-from assemble_data import Move, Position
 
 # Move = namedtuple("Move",
 #                   ("move_letters", "eval", "depth", "ranking"))
@@ -408,25 +407,82 @@ class ResNet(nn.Module):
 
 class ChessNet(nn.Module):
 
-  def __init__(self, in_channels):
+  def __init__(self, in_channels, out_channels, num_blocks=3):
 
     super(ChessNet, self).__init__()
 
     self.in_channels = in_channels
     c_in = in_channels
 
+    blocks = [ResidualBlock(c_in, c_in) for i in range(num_blocks)]
+
     self.board_cnn = nn.Sequential(
-      ResidualBlock(c_in, c_in),
-      ResidualBlock(c_in, c_in),
-      ResidualBlock(c_in, c_in),
+      *blocks,
       nn.Sequential(nn.Flatten(), nn.Linear(c_in * 8 * 8, c_in), nn.ReLU()),
-      nn.Linear(c_in, 1),
+      nn.Linear(c_in, out_channels),
     )
 
   def forward(self, x):
-    for l in self.layers:
+    for l in self.board_cnn:
       x = l(x)
     return x
+
+class FCResidualBlock(nn.Module):
+
+  def __init__(self, in_channels, numlayers=1, dropout_prob=0.0):
+
+    super(FCResidualBlock, self).__init__()
+
+    block = [nn.Sequential(
+      nn.Linear(in_channels, in_channels),
+      nn.ReLU(),
+      nn.Dropout(p=dropout_prob),
+    ) for i in range(numlayers)]
+
+    self.net = nn.Sequential(*block)
+    self.relu = nn.ReLU()
+
+  def forward(self, x):
+    residual = x
+    out = self.net(x)
+    out = out + residual
+    out = self.relu(out)
+    return out
+
+class FCChessNet(nn.Module):
+
+  def __init__(self, in_channels, out_channels, num_blocks=3, dropout_prob=0.0,
+               block_type="residual"):
+
+    super(FCChessNet, self).__init__()
+
+    self.in_channels = in_channels
+
+    if block_type == "residual":
+      blocks = [FCResidualBlock(in_channels * 8 * 8, 
+                                dropout_prob=dropout_prob,
+                                numlayers=3) for i in range(num_blocks)]
+    
+    else:
+      blocks = [nn.Sequential(
+        nn.Linear(in_channels * 8 * 8, in_channels * 8 * 8), 
+        nn.ReLU(),
+        nn.Dropout(p=dropout_prob),
+      ) for i in range(num_blocks)]
+
+    self.board_cnn = nn.Sequential(
+      nn.Flatten(),
+      nn.Linear(in_channels * 8 * 8, in_channels * 8 * 8),
+      nn.ReLU(),
+      *blocks,
+      nn.Linear(in_channels * 8 * 8, out_channels),
+    )
+
+  def forward(self, x):
+    for l in self.board_cnn:
+      x = l(x)
+    return x
+
 
 # ----- old, not currently used ----- #
 
@@ -593,12 +649,30 @@ def train(net, data_x, data_y, epochs=1, lr=5e-5, device="cuda"):
 
   return net
 
-def normalise_data(data, factors):
+def inspect_data(data, log_level=1):
+  """
+  Get the max, mean, and std of data
+  """
+
+  max_value = torch.max(-1 * torch.min(data), torch.max(data))
+  mean = data.mean()
+  std = data.std()
+  data = (data - mean) / std
+  new_max = torch.max(-1 * torch.min(data), torch.max(data))
+  data /= new_max
+  if log_level > 0:
+    print(f"Normalised evaluations, max_value = {max_value:.3f} (max used = {new_max:.3f}), mean = {mean.item():.3f}, std = {std.item():.3f}, now max value is {torch.max(-1 * torch.min(data), torch.max(data)):.3f}, mean is {data.mean().item():.3f} and std is {data.std().item():.3f}")
+  return new_max, mean, std
+
+def normalise_data(data, factors, clip=None):
   """
   Normalise data based on [max, mean, std]
   """
   max, mean, std = factors
-  return ((data - mean) / std) / max
+  d = ((data - mean) / std) / max
+  if clip is not None:
+    d = torch.clip(d, min=-clip, max=clip)
+  return d
 
 def denormalise_data(data, factors):
   """
@@ -607,55 +681,210 @@ def denormalise_data(data, factors):
   max, mean, std = factors
   return (data * max * std) + mean
 
-def train_procedure(net, dataname, dataloader, data_inds, norm_factors,
-                    epochs=1, lr=1e-7, device="cuda", batch_size=64,
-                    loss_style="MSE"):
-  """
-  Perform a training epoch for a given network based on data inputs
-  data_x, and correct outputs data_y
-  """
+class Trainer():
 
-  # move onto the specified device
-  net.board_cnn.to(device)
+  def __init__(self, net, data_dict,
+               lr=1e-5, weight_decay=1e-4, loss_style="MSE"):
+    """
+    Class to handle training of networks
+    """
 
-  # put the model in training mode
-  net.board_cnn.train()
+    # settings
+    self.slice_log_rate = 5
+    self.checkmate_value = 15 # clip checkmates to this value
+    self.use_sf_eval = False
+    self.use_sq_eval_sum_loss = True
 
-  if loss_style.lower() == "mse":
-    lossfcn = nn.MSELoss()
-  elif loss_style.lower() == "l1":
-    lossfcn = nn.L1Loss()
-  elif loss_style.lower() == "huber":
-    lossfcn == nn.HuberLoss()
-  else:
-    raise RuntimeError(f"train_procedure() error: loss_style = {loss_style} not recognised")
+    # input critical learning features
+    self.net = net
+    self.optim = torch.optim.Adam(net.board_cnn.parameters(), lr=lr, weight_decay=weight_decay)
 
-  optim = torch.optim.Adam(net.board_cnn.parameters(), lr=lr)
+    if loss_style.lower() == "mse":
+      self.lossfcn = nn.MSELoss()
+    elif loss_style.lower() == "l1":
+      self.lossfcn = nn.L1Loss()
+    elif loss_style.lower() == "huber":
+      self.lossfcn = nn.HuberLoss()
+    else:
+      raise RuntimeError(f"train_procedure() error: loss_style = {loss_style} not recognised")
+    
+    # prepare saving and loading
+    self.data_dict = data_dict
+    loadpath = f"{data_dict['path']}/{data_dict['loadpath']}/{data_dict['loadfolder']}"
+    self.dataloader = ModelSaver(loadpath, log_level=data_dict['load_log_level'])
+    savepath = f"{data_dict['path']}/{data_dict['savepath']}/{data_dict['savefolder']}"
+    self.datasaver = ModelSaver(savepath, log_level=data_dict['save_log_level'])
+
+    # create variables
+    self.train_loss = []
+    self.test_loss = []
+
+  def calc_loss(self, net_y, true_y):
+    """
+    Calculate the loss
+    """
+
+    if self.use_sf_eval:
+
+      loss = self.lossfcn(torch.sum(net_y, dim=1), true_y)
+
+    else:
+
+      loss = self.lossfcn(net_y.squeeze(1), true_y)
+
+      if self.use_sq_eval_sum_loss:
+
+        # constrain also the sum (using MSE error)
+        loss += torch.pow(torch.sum(net_y, dim=1) - torch.sum(true_y, dim=1), 2).mean()
+
+    return loss
+
+
+  def train(self, epochs, norm_factors,
+            device="cuda", batch_size=64,
+            examine_dist=False):
+    """
+    Perform a training epoch for a given network based on data inputs
+    data_x, and correct outputs data_y
+    """
+
+    # move onto the specified device
+    self.net.board_cnn.to(device)
+
+    # put the model in training mode
+    self.net.board_cnn.train()
+    
+    # each epoch, cover the entire training dataset
+    for i in range(epochs):
+
+      print(f"Starting epoch {i + 1} / {epochs}.")
+      total_batches = 0
+      epoch_loss = 0
+
+      # load the dataset in a series of slices
+      for slice_num, j in enumerate(self.data_dict['train_inds']):
+
+        # load this segment of the dataset
+        dataset = self.dataloader.load(self.data_dict['loadname'], id=j)
+        data_x = dataset[0]
+        if self.use_sf_eval:
+          data_y = dataset[1] * 10 # sf in 1/100th of pawn NOT 1/1000th
+        else:
+          data_y = dataset[2]
+
+        # clip checkmates
+        data_y = torch.clip(data_y, -self.checkmate_value, self.checkmate_value)
+
+        # normalise y labels
+        if norm_factors is not None:
+          data_y = normalise_data(data_y, norm_factors[:3], clip=norm_factors[3])
+
+        if examine_dist:
+          import matplotlib.pyplot as plt
+          fig, axs = plt.subplots(1, 1)
+          axs.hist(torch.flatten(data_y).numpy(), bins=50)
+          plt.show()
+          inspect_data(data_y)
+          continue
+
+        num_batches = len(data_x) // batch_size
+        total_batches += num_batches
+        rand_idx = torch.randperm(data_x.shape[0])
+        avg_loss = 0
+
+        if j % self.slice_log_rate == 1:
+          print(f"Epoch {i + 1}. Starting slice {slice_num + 1} / {len(self.data_dict['train_inds'])}. There will be {num_batches} batches.", end=" ", flush=True)
+
+        # iterate through each batch for this slice of the dataset
+        for n in range(num_batches):
+
+          batch_x = data_x[rand_idx[n * batch_size : (n+1) * batch_size]]
+          batch_y = data_y[rand_idx[n * batch_size : (n+1) * batch_size]]
+
+          # go to cuda
+          batch_x = batch_x.to(device)
+          batch_y = batch_y.to(device)
+
+          # use the model for a prediction and calculate loss
+          net_y = self.net.board_cnn(batch_x)
+          loss = self.calc_loss(net_y.squeeze(1), batch_y)
+
+          # backpropagate
+          self.optim.zero_grad()
+          loss.backward()
+          self.optim.step()
+
+          avg_loss += loss.item()
+
+          # if n % 500 == 0:
+          #   print(f"Loss is {(avg_loss / (n + 1)) * 1000:.3f}, epoch {i + 1}, batch {n + 1} / {num_batches}")
+
+        # this dataset slice is finished
+        epoch_loss += avg_loss
+
+        avg_loss = avg_loss / num_batches
+        avg_loss = avg_loss * 1e3
+        self.train_loss.append(avg_loss)
+
+        if j % self.slice_log_rate == 1:
+          print(f"Loss is {avg_loss:.3f} e-3", flush=True)
+    
+      # this epoch is finished
+      epoch_loss = epoch_loss / total_batches
+      epoch_loss = epoch_loss * 1e3
+      print(f"Epoch {i + 1} has finished after {total_batches} batches. Overall average loss = {epoch_loss:.3f} e-3.", 
+            f"Final slice loss = {avg_loss:.3f}.", flush=True)
+      
+      # evaluate model performance
+      test_loss = self.test(device=device, norm_factors=norm_factors, batch_size=batch_size)
+      test_report = f"Test loss = {test_loss:.3f} e-3."
+
+      # save the model after this epoch
+      self.datasaver.save(data_dict['savename'], self.net, txtstr=test_report, txtlabel="test_report")
+
+    # finally, return the network that we have trained
+    return self.net
   
-  # each epoch, cover the entire training dataset
-  for i in range(epochs):
+  def test(self, device, norm_factors, batch_size=64):
+    """
+    Perform a training epoch for a given network based on data inputs
+    data_x, and correct outputs data_y
+    """
 
-    print(f"Starting epoch {i + 1}.")
+    # move onto the specified device
+    self.net.board_cnn.to(device)
+
+    # put the model in training mode
+    self.net.board_cnn.eval()
+
     total_batches = 0
-    epoch_loss = 0
+    test_loss = 0
 
     # load the dataset in a series of slices
-    for slice_num, j in enumerate(data_inds):
+    for slice_num, j in enumerate(self.data_dict['test_inds']):
 
       # load this segment of the dataset
-      dataset = dataloader.load(dataname, id=j)
-      data_x = dataset.boards
-      data_y = dataset.evals
+      dataset = self.dataloader.load(self.data_dict['loadname'], id=j)
+      data_x = dataset[0]
+      if self.use_sf_eval:
+        data_y = dataset[1] * 10 # sf in 1/100th of pawn NOT 1/1000th
+      else:
+        data_y = dataset[2]
+
+      # clip checkmates
+      data_y = torch.clip(data_y, -self.checkmate_value, self.checkmate_value)
 
       # normalise y labels
-      data_y = normalise_data(data_y, norm_factors)
+      if norm_factors is not None:
+        data_y = normalise_data(data_y, norm_factors[:3], clip=norm_factors[3])
 
       num_batches = len(data_x) // batch_size
       total_batches += num_batches
       rand_idx = torch.randperm(data_x.shape[0])
       avg_loss = 0
 
-      print(f"Starting slice {slice_num + 1} / {len(data_inds)}. There will be {num_batches} batches. ", end="", flush=True)
+      if j % self.slice_log_rate == 1:
+        print(f"Testing. Starting slice {slice_num + 1} / {len(self.data_dict['test_inds'])}. There will be {num_batches} batches.", end=" ", flush=True)
 
       # iterate through each batch for this slice of the dataset
       for n in range(num_batches):
@@ -667,14 +896,11 @@ def train_procedure(net, dataname, dataloader, data_inds, norm_factors,
         batch_x = batch_x.to(device)
         batch_y = batch_y.to(device)
 
-        # use the model for a prediction and calculate loss
-        net_y = net.board_cnn(batch_x)
-        loss = lossfcn(net_y.squeeze(1), batch_y)
+        with torch.no_grad():
 
-        # backpropagate
-        loss.backward()
-        optim.step()
-        optim.zero_grad()
+          # use the model for a prediction and calculate loss
+          net_y = net.board_cnn(batch_x)
+          loss = self.calc_loss(net_y.squeeze(1), batch_y)
 
         avg_loss += loss.item()
 
@@ -682,52 +908,126 @@ def train_procedure(net, dataname, dataloader, data_inds, norm_factors,
         #   print(f"Loss is {(avg_loss / (n + 1)) * 1000:.3f}, epoch {i + 1}, batch {n + 1} / {num_batches}")
 
       # this dataset slice is finished
-      epoch_loss += avg_loss
-      avg_loss = avg_loss / num_batches
-      avg_loss = avg_loss ** 0.5 * norm_factors[0] * norm_factors[2] # try to scale to original units
-      print(f"Loss is {avg_loss:.3f}, during epoch {i + 1}, slice {slice_num + 1} / {len(data_inds)}", flush=True)
-  
-    # this epoch is finished
-    epoch_loss = epoch_loss / total_batches
-    epoch_loss = epoch_loss ** 0.5 * norm_factors[0] * norm_factors[2] # try to scale to original units
-    print(f"Epoch {i + 1} has finished after {total_batches} batches. Overall average loss = {epoch_loss:.3f}", flush=True)
+      test_loss += avg_loss
 
-  # finally, return the network that we have trained
-  return net
+      # for printing
+      avg_loss = avg_loss / num_batches
+      avg_loss = avg_loss * 1e3
+
+      if j % self.slice_log_rate == 1:
+        print(f"Loss is {avg_loss:.3f} e-3", flush=True)
+
+    # the test is finished
+    test_loss = test_loss / total_batches
+    test_loss = test_loss * 1e3
+    print(f"Testing has finished after {total_batches} batches. Overall average loss = {test_loss:.3f} e-3.", flush=True)
+    
+    return test_loss
 
 if __name__ == "__main__":
 
   t1 = time.time()
 
+  # starting time
+  starting_time = datetime.now()
+
+  # key default settings
+  datestr = "%d-%m-%y_%H-%M" # all date inputs must follow this format
+
   parser = argparse.ArgumentParser()
-  parser.add_argument("--epochs", type=int, default=10)                   # number of training epochs
+  parser.add_argument("-j", "--job", type=int, default=1)                 # job input number
+  parser.add_argument("-t", "--timestamp", default=None)                  # timestamp override
+  parser.add_argument("--epochs", type=int, default=1)                    # number of training epochs
   parser.add_argument("-lr", "--learning-rate", type=float, default=1e-7)   # learning rate during training
   parser.add_argument("--device", default="cuda")                         # device to use, "cpu" or "cuda"
   parser.add_argument("--batch-size", type=int, default=64)               # size of learning batches
   parser.add_argument("--loss-style", default="MSE")                      # loss function, 'MSE', 'L1', or 'Huber'
+  parser.add_argument("--num-blocks", type=int, default=3)                # number of residual blocks in chess net
+  parser.add_argument("--weight-decay", type=float, default=1e-4)         # L2 weight regularisation
+  parser.add_argument("--dropout-prob", type=float, default=0.0)          # probability of a node dropping out during training
+  parser.add_argument("--torch-threads", type=int, default=1)             # number of threads to allocate to pytorch, 0 to disable
 
   args = parser.parse_args()
 
-  # create the network based on 19 layer boards
-  net = ChessNet(19)
+  timestamp = args.timestamp if args.timestamp else datetime.now().strftime(datestr)
 
-  # initiate the training procedure
-  trained_net = train_procedure(
+  run_name = f"run_{timestamp[-5:]}_A{args.job}"
+  group_name = timestamp[:8]
+
+  if args.torch_threads > 0:
+    torch.set_num_threads(args.torch_threads)
+
+  # saving/loading information
+  data_dict = {
+    "path" : "/home/luke/chess",
+    "loadpath" : "/python/datasets",
+    "loadfolder" : "datasetv3",
+    "loadname" : "data_torch",
+    "savepath" : "/python/models",
+    "savefolder" : f"{group_name}/{run_name}",
+    "savename" : "network",
+    "train_inds" : list(range(1, 61)),
+    "test_inds" : list(range(61, 69)),
+    "load_log_level" : 0,
+    "save_log_level" : 1,
+  }
+
+  # create the network based on 19 layer boards
+  newnet = False
+  if newnet:
+    in_features = 17
+    out_features = 64
+    net = FCChessNet(in_features, out_features, num_blocks=args.num_blocks, 
+                    dropout_prob=args.dropout_prob)
+  
+  # or load an existing network
+  else:
+    group = "01-11-24"
+    run = "run_10-31_A1"
+    modelloader = ModelSaver(f"/home/luke/chess/python/models/{group}/{run}")
+    net = modelloader.load("network", id=None)
+
+  trainer = Trainer(
     net=net,
-    dataname="datasetv1",
-    dataloader=ModelSaver("/home/luke/chess/python/datasets/", log_level=1),
-    data_inds=list(range(1, 11)),
-    norm_factors=[23.927, -0.240, 0.355],
-    epochs=args.epochs,
+    data_dict=data_dict,
     lr=args.learning_rate,
-    device=args.device,
-    batch_size=args.batch_size,
-    loss_style=args.loss_style,  
+    weight_decay=args.weight_decay,
+    loss_style=args.loss_style,
   )
+
+  # check important settings!
+  trainer.slice_log_rate = 5
+  trainer.use_sf_eval = True
+  trainer.use_sq_eval_sum_loss = True
+
+  trainer.train(
+    epochs=args.epochs,
+    norm_factors=[7, 0, 2.159, None],
+    device=args.device,
+    examine_dist=False
+  )
+
+
+  # # initiate the training procedure
+  # trained_net = train_procedure(
+  #   net=net,
+  #   data_dict=data_dict,
+  #   dataname="data_torch",
+  #   dataloader=ModelSaver(f"/home/luke/chess/python/datasets/{datafolder}", log_level=0),
+  #   data_inds=data_inds,
+  #   norm_factors=[7, 0, 2.159, None], #[6, -0.240, 0.355, 1], #[23.927, -0.240, 0.355, None],
+  #   epochs=args.epochs,
+  #   lr=args.learning_rate,
+  #   device=args.device,
+  #   batch_size=args.batch_size,
+  #   loss_style=args.loss_style,
+  #   weight_decay=args.weight_decay,
+  #   examine_dist=False,
+  # )
 
   # save the finished model
   modelsaver = ModelSaver("/home/luke/chess/python/models/")
-  modelsaver.save("chessnet_model", trained_net)
+  modelsaver.save("chessnet_model", trainer.net)
 
   t2 = time.time()
 

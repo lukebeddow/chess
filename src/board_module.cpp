@@ -87,14 +87,19 @@ PYBIND11_MODULE(board_module, m) {
         .def_readwrite("colour", &BoardVectors::colour)
         .def_readwrite("total_moves", &BoardVectors::total_moves)
         .def_readwrite("no_take_ply", &BoardVectors::no_take_ply)
+        .def_readwrite("sq_evals", &BoardVectors::sq_evals)
+        .def_readwrite("squares_evaluated", &BoardVectors::squares_evaluated)
         ;
 
     // expose only functions we want to be usable from python
     m.def("generate_moves_FEN", &generate_moves_FEN);
     m.def("print_FEN_board", &print_FEN_board);
+    m.def("print_board_vectors", &print_board_vectors);
     m.def("FEN_to_board_vectors", &FEN_to_board_vectors);
     m.def("is_white_next_FEN", &is_white_next_FEN);
+    m.def("FEN_to_board_vectors_with_eval", &FEN_to_board_vectors_with_eval);
     m.def("FEN_and_move_to_board_vectors", &FEN_and_move_to_board_vectors);
+    m.def("FEN_move_eval_to_board_vectors", &FEN_move_eval_to_board_vectors);
 
     // functions that use the board struct
     // m.def("create_board", py::overload_cast<>(&create_board));
