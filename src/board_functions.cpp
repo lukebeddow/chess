@@ -76,18 +76,18 @@
                     ind = (((9 - i) * 10) + (8 - j));
 
                     // what is happening on this square?
-                    if (board.arr[ind] == -1)  to_print = "bP ";
-                    else if (board.arr[ind] == -2)  to_print = "bN ";
-                    else if (board.arr[ind] == -3)  to_print = "bB ";
-                    else if (board.arr[ind] == -4)  to_print = "bR ";
-                    else if (board.arr[ind] == -5)  to_print = "bQ ";
-                    else if (board.arr[ind] == -6)  to_print = "bK ";
-                    else if (board.arr[ind] == 1)   to_print = "wP ";
-                    else if (board.arr[ind] == 2)   to_print = "wN ";
-                    else if (board.arr[ind] == 3)   to_print = "wB ";
-                    else if (board.arr[ind] == 4)   to_print = "wR ";
-                    else if (board.arr[ind] == 5)   to_print = "wQ ";
-                    else if (board.arr[ind] == 6)   to_print = "wK ";
+                    if (board.arr[ind] == BoardSq::bP)  to_print = "bP ";
+                    else if (board.arr[ind] == BoardSq::bN)  to_print = "bN ";
+                    else if (board.arr[ind] == BoardSq::bB)  to_print = "bB ";
+                    else if (board.arr[ind] == BoardSq::bR)  to_print = "bR ";
+                    else if (board.arr[ind] == BoardSq::bQ)  to_print = "bQ ";
+                    else if (board.arr[ind] == BoardSq::bK)  to_print = "bK ";
+                    else if (board.arr[ind] == BoardSq::wP)   to_print = "wP ";
+                    else if (board.arr[ind] == BoardSq::wN)   to_print = "wN ";
+                    else if (board.arr[ind] == BoardSq::wB)   to_print = "wB ";
+                    else if (board.arr[ind] == BoardSq::wR)   to_print = "wR ";
+                    else if (board.arr[ind] == BoardSq::wQ)   to_print = "wQ ";
+                    else if (board.arr[ind] == BoardSq::wK)   to_print = "wK ";
                     else if (board.arr[ind] == 0)   to_print = " . ";
                     else                            to_print = " x ";
 
@@ -95,7 +95,7 @@
                     if (ind / 10 == 4) {
                         for (int k = 0; k < 8; ++k) {
                             int en_pass_bool = 53 - ind;
-                            if (board.arr[en_pass_bool] == 7) {
+                            if (board.arr[en_pass_bool] == BoardSq::yes) {
                                 to_print = " , ";
                             }
                         }
@@ -103,7 +103,7 @@
                     if (ind / 10 == 7) {
                         for (int k = 0; k < 8; ++k) {
                             int en_pass_bool = 91 - ind;
-                            if (board.arr[en_pass_bool] == 7) {
+                            if (board.arr[en_pass_bool] == BoardSq::yes) {
                                 to_print = " , ";
                             }
                         }
@@ -126,10 +126,10 @@
         if (neat == false) {
             print_string = "\n\t Castle rights (if any): ";
             //std::cout << "\n\n\t Castle rights (if any): ";
-            if (board.arr[0] == 7) print_string += "wKS, "; // std::cout << "wKS, ";
-            if (board.arr[1] == 7) print_string += "wQS, "; // std::cout << "wQS, ";
-            if (board.arr[2] == 7) print_string += "bKS, "; // std::cout << "bKS, ";
-            if (board.arr[3] == 7) print_string += "bQS, "; // std::cout << "bQS, ";
+            if (board.arr[BoardInd::castleWK] == BoardSq::yes) print_string += "wKS, "; // std::cout << "wKS, ";
+            if (board.arr[BoardInd::castleWQ] == BoardSq::yes) print_string += "wQS, "; // std::cout << "wQS, ";
+            if (board.arr[BoardInd::castleBK] == BoardSq::yes) print_string += "bKS, "; // std::cout << "bKS, ";
+            if (board.arr[BoardInd::castleBQ] == BoardSq::yes) print_string += "bQS, "; // std::cout << "bQS, ";
             py::print(print_string);
         }
 
@@ -177,7 +177,7 @@ piece_moves_struct how_piece_moves(int piece_type, int piece_colour) {
     // go through each type of piece and assign values
     if (piece_type == 0) throw std::invalid_argument("Piece type = 0");
     // if the piece is a pawn
-    else if (piece_type == 1) {
+    else if (piece_type == BoardSq::wP) {
         // is it a white pawn
         if (piece_colour == 1) {
             piece_moves.directions = { -9, -10, -11 };
@@ -190,27 +190,27 @@ piece_moves_struct how_piece_moves(int piece_type, int piece_colour) {
         }
     }
     // if the piece is a knight
-    else if (piece_type == 2) {
+    else if (piece_type == BoardSq::wN) {
         piece_moves.directions = { -21, -19, -12, -8, 8, 12, 19, 21 };
         piece_moves.depth = 1;
     }
     // if the piece is a bishop
-    else if (piece_type == 3) {
+    else if (piece_type == BoardSq::wB) {
         piece_moves.directions = { -11, -9, 9, 11 };
         piece_moves.depth = 7;
     }
     // if the piece is a rook
-    else if (piece_type == 4) {
+    else if (piece_type == BoardSq::wR) {
         piece_moves.directions = { -10, -1, 1, 10 };
         piece_moves.depth = 7;
     }
     // if the piece is a queen
-    else if (piece_type == 5) {
+    else if (piece_type == BoardSq::wQ) {
         piece_moves.directions = { -11, -10, -9, -1, 1, 9, 10, 11 };
         piece_moves.depth = 7;
     }
     // if the piece is a king
-    else if (piece_type == 6) {
+    else if (piece_type == BoardSq::wK) {
         piece_moves.directions = { -11, -10, -9, -1, 1, 9, 10, 11 };
         piece_moves.depth = 1;
     }
@@ -275,57 +275,60 @@ std::string square_numbers_to_letters(int square)
 }
 
 Board create_board(bool pieces) {
-    /*This recieves a board array and sets everything to its default values*/
+    /* This recieves a board array and sets everything to its default values */
 
-    //static int board[120];
     Board board;
 
     // loop through and set up the pieces
-    for (int i = 0; i < 120; ++i) {
+    for (int i = 0; i < BOARD_ARR_SIZE; ++i) {
 
         // default
-        board.arr[i] = -7;
+        board.arr[i] = BoardSq::no;
 
         if (pieces) {
 
             // set castle rights booleans to true
-            if (i == 0 or i == 1 or i == 2 or i == 3) board.arr[i] = 7;
+            if (i == BoardInd::castleWK or 
+                i == BoardInd::castleWQ or 
+                i == BoardInd::castleBK or 
+                i == BoardInd::castleBQ) board.arr[i] = BoardSq::yes;
 
             // white pawns
             if ((i / 10 == 3) and (i != 30) and (i != 39)) {
-                board.arr[i] = 1;
+                board.arr[i] = BoardSq::wP;
             }
             // black pawns
             if ((i / 10 == 8) and (i != 80) and (i != 89)) {
-                board.arr[i] = -1;
+                board.arr[i] = BoardSq::bP;
             }
 
             // white pieces
-            if (i == 21 or i == 28) board.arr[i] = 4;       // rooks
-            if (i == 22 or i == 27) board.arr[i] = 2;       // knights
-            if (i == 23 or i == 26) board.arr[i] = 3;       // bishops
-            if (i == 25) board.arr[i] = 5;                  // queen
-            if (i == 24) board.arr[i] = 6;                  // king
+            if (i == 21 or i == 28) board.arr[i] = BoardSq::wR;       // rooks
+            if (i == 22 or i == 27) board.arr[i] = BoardSq::wN;       // knights
+            if (i == 23 or i == 26) board.arr[i] = BoardSq::wB;       // bishops
+            if (i == 25) board.arr[i] = BoardSq::wQ;                  // queen
+            if (i == 24) board.arr[i] = BoardSq::wK;                  // king
 
             // black pieces
-            if (i == 91 or i == 98) board.arr[i] = -4;      // rooks
-            if (i == 92 or i == 97) board.arr[i] = -2;      // knights
-            if (i == 93 or i == 96) board.arr[i] = -3;      // bishops
-            if (i == 95) board.arr[i] = -5;                 // queen
-            if (i == 94) board.arr[i] = -6;                 // king
+            if (i == 91 or i == 98) board.arr[i] = BoardSq::bR;      // rooks
+            if (i == 92 or i == 97) board.arr[i] = BoardSq::bN;      // knights
+            if (i == 93 or i == 96) board.arr[i] = BoardSq::bB;      // bishops
+            if (i == 95) board.arr[i] = BoardSq::bQ;                 // queen
+            if (i == 94) board.arr[i] = BoardSq::bK;                 // king
         }
         else {
-            if (i > 20 and i < 29) board.arr[i] = 0;
-            if (i > 30 and i < 39) board.arr[i] = 0;
-            if (i > 80 and i < 89) board.arr[i] = 0;
-            if (i > 90 and i < 99) board.arr[i] = 0;
+            // not putting pieces on the board
+            if (i > 20 and i < 29) board.arr[i] = BoardSq::empty;
+            if (i > 30 and i < 39) board.arr[i] = BoardSq::empty;
+            if (i > 80 and i < 89) board.arr[i] = BoardSq::empty;
+            if (i > 90 and i < 99) board.arr[i] = BoardSq::empty;
         }
 
         // board squares
-        if (i > 40 and i < 49) board.arr[i] = 0;
-        if (i > 50 and i < 59) board.arr[i] = 0;
-        if (i > 60 and i < 69) board.arr[i] = 0;
-        if (i > 70 and i < 79) board.arr[i] = 0;
+        if (i > 40 and i < 49) board.arr[i] = BoardSq::empty;
+        if (i > 50 and i < 59) board.arr[i] = BoardSq::empty;
+        if (i > 60 and i < 69) board.arr[i] = BoardSq::empty;
+        if (i > 70 and i < 79) board.arr[i] = BoardSq::empty;
 
     }
 
@@ -337,7 +340,7 @@ bool check_board(Board& board)
     /* this function checks that a board falls within normal values */
 
     for (int a : board.arr) {
-        if (a > 7 or a < -7) {
+        if (a > BoardSq::yes or a < BoardSq::no) {
             std::cout << "Board is corrupted!\n";
             return false;
         }
@@ -346,7 +349,7 @@ bool check_board(Board& board)
     return true;
 }
 
-// TESTING declare early, no definition
+// declare early, no definition yet
 int is_passed_pawn(Board& board, int our_colour, int square_num);
 
 void print_board(Board& board, bool neat) {
@@ -416,23 +419,23 @@ void print_board(Board& board, bool neat) {
                 ind = (((9 - i) * 10) + (8 - j));
 
                 // what is happening on this square?
-                if (board.arr[ind] == -1)  to_print = "bP ";
-                else if (board.arr[ind] == -2)  to_print = "bN ";
-                else if (board.arr[ind] == -3)  to_print = "bB ";
-                else if (board.arr[ind] == -4)  to_print = "bR ";
-                else if (board.arr[ind] == -5)  to_print = "bQ ";
-                else if (board.arr[ind] == -6)  to_print = "bK ";
-                else if (board.arr[ind] == 1)   to_print = "wP ";
-                else if (board.arr[ind] == 2)   to_print = "wN ";
-                else if (board.arr[ind] == 3)   to_print = "wB ";
-                else if (board.arr[ind] == 4)   to_print = "wR ";
-                else if (board.arr[ind] == 5)   to_print = "wQ ";
-                else if (board.arr[ind] == 6)   to_print = "wK ";
+                if (board.arr[ind] == BoardSq::bP)  to_print = "bP ";
+                else if (board.arr[ind] == BoardSq::bN)  to_print = "bN ";
+                else if (board.arr[ind] == BoardSq::bB)  to_print = "bB ";
+                else if (board.arr[ind] == BoardSq::bR)  to_print = "bR ";
+                else if (board.arr[ind] == BoardSq::bQ)  to_print = "bQ ";
+                else if (board.arr[ind] == BoardSq::bK)  to_print = "bK ";
+                else if (board.arr[ind] == BoardSq::wP)   to_print = "wP ";
+                else if (board.arr[ind] == BoardSq::wN)   to_print = "wN ";
+                else if (board.arr[ind] == BoardSq::wB)   to_print = "wB ";
+                else if (board.arr[ind] == BoardSq::wR)   to_print = "wR ";
+                else if (board.arr[ind] == BoardSq::wQ)   to_print = "wQ ";
+                else if (board.arr[ind] == BoardSq::wK)   to_print = "wK ";
                 else if (board.arr[ind] == 0)   to_print = " . ";
                 else                            to_print = " x ";
 
                 //// for testing! lets visualise passed pawn scores (0=not passed...)
-                //if (board.arr[ind] == 1 or board.arr[ind] == -1) {
+                //if (board.arr[ind] == BoardSq::wP or board.arr[ind] == BoardSq::bP) {
                 //    int passed = is_passed_pawn(board, board.arr[ind], ind);
                 //    std::string passed_str = std::to_string(passed);
                 //    to_print += passed_str;
@@ -442,7 +445,7 @@ void print_board(Board& board, bool neat) {
                 if (ind / 10 == 4) {
                     for (int k = 0; k < 8; ++k) {
                         int en_pass_bool = 53 - ind;
-                        if (board.arr[en_pass_bool] == 7) {
+                        if (board.arr[en_pass_bool] == BoardSq::yes) {
                             to_print = " , ";
                         }
                     }
@@ -450,7 +453,7 @@ void print_board(Board& board, bool neat) {
                 if (ind / 10 == 7) {
                     for (int k = 0; k < 8; ++k) {
                         int en_pass_bool = 91 - ind;
-                        if (board.arr[en_pass_bool] == 7) {
+                        if (board.arr[en_pass_bool] == BoardSq::yes) {
                             to_print = " , ";
                         }
                     }
@@ -466,10 +469,10 @@ void print_board(Board& board, bool neat) {
     // include castle rights if doing full print
     if (neat == false) {
         std::cout << "\n\n\t Castle rights (if any): ";
-        if (board.arr[0] == 7) std::cout << "wKS, ";
-        if (board.arr[1] == 7) std::cout << "wQS, ";
-        if (board.arr[2] == 7) std::cout << "bKS, ";
-        if (board.arr[3] == 7) std::cout << "bQS, ";
+        if (board.arr[BoardInd::castleWK] == BoardSq::yes) std::cout << "wKS, ";
+        if (board.arr[BoardInd::castleWQ] == BoardSq::yes) std::cout << "wQS, ";
+        if (board.arr[BoardInd::castleBK] == BoardSq::yes) std::cout << "bKS, ";
+        if (board.arr[BoardInd::castleBQ] == BoardSq::yes) std::cout << "bQS, ";
     }
 
     // print a board header at bottom
@@ -491,7 +494,8 @@ bool is_in_check(Board& board, int check_square, int piece_colour) {
     colour to the colour given*/
 
     // if the specified square is out of bounds
-    if (board.arr[check_square] == 7 or board.arr[check_square] == -7)
+    if (board.arr[check_square] == BoardSq::yes or 
+        board.arr[check_square] == BoardSq::no)
         throw std::invalid_argument("Square given is out of bounds");
 
     int piece_one;                  // 1st kind of piece
@@ -530,14 +534,15 @@ bool is_in_check(Board& board, int check_square, int piece_colour) {
                 dest_sq += move_dist;
 
                 // is the square out of bounds
-                if (board.arr[dest_sq] == -7 or board.arr[dest_sq] == 7)
+                if (board.arr[dest_sq] == BoardSq::no or 
+                    board.arr[dest_sq] == BoardSq::yes)
                     break;
 
                 // if the square contains an opposing piece of this type
                 if (board.arr[dest_sq] == piece_one or board.arr[dest_sq] == piece_two) {
 
                     // check if the piece is a pawn (different rules apply)
-                    if (board.arr[dest_sq] == 1 * attack_sign) {
+                    if (board.arr[dest_sq] == BoardSq::wP * attack_sign) {
                         // can the pawn attack us
                         if (dest_sq != check_square - (9 * attack_sign) and
                             dest_sq != check_square - (11 * attack_sign))
@@ -573,7 +578,8 @@ bool list_of_castles(Board& board, int piece_colour,
     // check if this player has castle rights
     if (piece_colour == 1) {
         // if both castle booleans are set false (-7)
-        if (board.arr[0] == -7 and board.arr[1] == -7)
+        if (board.arr[BoardInd::castleWK] == BoardSq::no and 
+            board.arr[BoardInd::castleWQ] == BoardSq::no)
             return false;
         // define some castling information for white
         i = 0;
@@ -582,7 +588,8 @@ bool list_of_castles(Board& board, int piece_colour,
     }
     else if (piece_colour == -1) {
         // if both castle booleans are set false (-7)
-        if (board.arr[2] == -7 and board.arr[3] == -7)
+        if (board.arr[BoardInd::castleBK] == BoardSq::no and 
+            board.arr[BoardInd::castleBQ] == BoardSq::no)
             return false;
         // define some castling information for black
         i = 2;
@@ -603,7 +610,7 @@ bool list_of_castles(Board& board, int piece_colour,
     for (int j = 0; j < 2; ++j) {
 
         // if the player has the right to castle on this side
-        if (board.arr[i + j] == 7) {
+        if (board.arr[i + j] == BoardSq::yes) {
 
             // check that all required squares are empty
             if (board.arr[squares_need_empty[0 + (j * 3)]] == 0 and
@@ -616,13 +623,13 @@ bool list_of_castles(Board& board, int piece_colour,
                     is_in_check(board, squares_no_check[2 + (j * 3)], piece_colour))) {
 
                     // check we have a rook to move
-                    if (board.arr[rook_squares[j]] == 4 or
-                        board.arr[rook_squares[j]] == -4) {
+                    if (board.arr[rook_squares[j]] == BoardSq::wR or
+                        board.arr[rook_squares[j]] == BoardSq::bR) {
 
                         // hence, the castling move is legal, save it
                         castle_list.push_back(king_sq);
                         castle_list.push_back(castle_destination[j]);
-                        castle_list.push_back(5);   // move modifier = 5
+                        castle_list.push_back(MoveMod::castle);   // move modifier = 5
 
                         // we have at least one legal castle
                         any_castles = true;
@@ -644,40 +651,40 @@ void move_piece_on_board(Board& board, int start_sq, int dest_sq) {
 
     // move the piece
     board.arr[dest_sq] = board.arr[start_sq];
-    board.arr[start_sq] = 0;
+    board.arr[start_sq] = BoardSq::empty;
 
     // if the passant wipe boolean is set true
     // NB: for the board array -> 7 = true, -7 = false
-    if (board.arr[4] == 7) {
+    if (board.arr[BoardInd::passantWipe] == BoardSq::yes) {
         // wipe all the en passant booleans, set all to false
         for (int i = 0; i < 16; ++i) {
             // passant booleans are from board[5] to board[20] inclusive
-            board.arr[i + 5] = -7;
+            board.arr[i + BoardInd::passantStart] = BoardSq::no;
         }
 
         // now we have reset them, set passant wipe boolean to false
-        board.arr[4] = -7; // 7 = true, -7 = false
+        board.arr[BoardInd::passantWipe] = BoardSq::no; // 7 = true, -7 = false
     }
 
     // was this move a pawn going two squares
-    if ((board.arr[dest_sq] == 1 or board.arr[dest_sq] == -1) and
+    if ((board.arr[dest_sq] == BoardSq::wP or board.arr[dest_sq] == BoardSq::bP) and
         (dest_sq - start_sq == 20 or dest_sq - start_sq == -20)) {
 
         // if it is a white pawn
         if (start_sq / 10 == 3) {
             int en_pass_square = start_sq + 10;
             int en_pass_bool = 53 - en_pass_square;
-            board.arr[en_pass_bool] = 7; // 7 = true, -7 = false
+            board.arr[en_pass_bool] = BoardSq::yes; // 7 = true, -7 = false
         }
         // if it is a black pawn
         else if (start_sq / 10 == 8) {
             int en_pass_square = start_sq - 10;
             int en_pass_bool = 91 - en_pass_square;
-            board.arr[en_pass_bool] = 7; // 7 = true, -7 = false
+            board.arr[en_pass_bool] = BoardSq::yes; // 7 = true, -7 = false
         }
 
         // now set the passant wipe boolean to true so it is wiped next move
-        board.arr[4] = 7; // 7 = true, -7 = false
+        board.arr[BoardInd::passantWipe] = BoardSq::yes; // 7 = true, -7 = false
     }
 
     // check if this move removed castle rights
@@ -685,48 +692,50 @@ void move_piece_on_board(Board& board, int start_sq, int dest_sq) {
     // what colour of piece just moved
     if (board.arr[dest_sq] > 0) {
         // white moved, does white have castle rights?
-        if (board.arr[0] == 7 or board.arr[1] == 7) {
+        if (board.arr[BoardInd::castleWK] == BoardSq::yes or 
+            board.arr[BoardInd::castleWQ] == BoardSq::yes) {
             // did a king just move
-            if (board.arr[dest_sq] == 6) {
+            if (board.arr[dest_sq] == BoardSq::wK) {
                 // any king movement removes all castle rights
-                board.arr[0] = -7;
-                board.arr[1] = -7;
+                board.arr[BoardInd::castleWK] = BoardSq::no;
+                board.arr[BoardInd::castleWQ] = BoardSq::no;
             }
             // did a rook just move
-            else if (board.arr[dest_sq] == 4) {
+            else if (board.arr[dest_sq] == BoardSq::wR) {
                 // was it the kingside rook
                 if (start_sq == 21) {
                     // remove kingside castling rights
-                    board.arr[0] = -7;
+                    board.arr[BoardInd::castleWK] = BoardSq::no;
                 }
                 // was it the queenside rook
                 else if (start_sq == 28) {
                     // remove queenside castling rights
-                    board.arr[1] = -7;
+                    board.arr[BoardInd::castleWQ] = BoardSq::no;
                 }
             }
         }
     }
     else if (board.arr[dest_sq] < 0) {
         // black moved, does black have castle rights?
-        if (board.arr[2] == 7 or board.arr[3] == 7) {
+        if (board.arr[BoardInd::castleBK] == BoardSq::yes or 
+            board.arr[BoardInd::castleBQ] == BoardSq::yes) {
             // did a king just move
-            if (board.arr[dest_sq] == -6) {
+            if (board.arr[dest_sq] == BoardSq::bK) {
                 // any king movement removes all castle rights
-                board.arr[2] = -7;
-                board.arr[3] = -7;
+                board.arr[BoardInd::castleBK] = BoardSq::no;
+                board.arr[BoardInd::castleBQ] = BoardSq::no;
             }
             // did a rook just move
-            else if (board.arr[dest_sq] == -4) {
+            else if (board.arr[dest_sq] == BoardSq::bR) {
                 // was it the kingside rook
                 if (start_sq == 91) {
                     // remove kingside castling rights
-                    board.arr[2] = -7;
+                    board.arr[BoardInd::castleBK] = BoardSq::no;
                 }
                 // was it the queenside rook
                 else if (start_sq == 98) {
                     // remove queenside castling rights
-                    board.arr[3] = -7;
+                    board.arr[BoardInd::castleBQ] = BoardSq::no;
                 }
             }
         }
@@ -757,28 +766,28 @@ void make_move(Board& board, int start_sq, int dest_sq, int move_modifier) {
     9 = promotion to rook       */
 
     // if the move was to an empty square
-    if (move_modifier == 1) { /* do nothing */ }
+    if (move_modifier == MoveMod::moveToEmpty) { /* do nothing */ }
     
     // if the move was a capture
-    else if (move_modifier == 2) { /* do nothing */ }
+    else if (move_modifier == MoveMod::capture) { /* do nothing */ }
 
     // if the move was a capture en passant
-    else if (move_modifier == 3) {
+    else if (move_modifier == MoveMod::captureEnPassant) {
         // was the capturing pawn white
-        if (board.arr[dest_sq] == 1) {
+        if (board.arr[dest_sq] == BoardSq::wP) {
             // remove the pawn behind it
-            board.arr[dest_sq - 10] = 0;
+            board.arr[dest_sq - 10] = BoardSq::empty;
         }
         // else if the capturing pawn was black
-        else if (board.arr[dest_sq] == -1) {
+        else if (board.arr[dest_sq] == BoardSq::bP) {
             // remove the pawn in front of it
-            board.arr[dest_sq + 10] = 0;
+            board.arr[dest_sq + 10] = BoardSq::empty;
         }
         else { throw std::runtime_error("make_move en passant logic failed"); }
     }
 
     // if the move was a castle
-    else if (move_modifier == 5) {
+    else if (move_modifier == MoveMod::castle) {
         // what kind of castle was it? We need to also move the rook
         if      (dest_sq == 22) { move_piece_on_board(board, 21, 23); }
         else if (dest_sq == 26) { move_piece_on_board(board, 28, 25); }
@@ -787,11 +796,11 @@ void make_move(Board& board, int start_sq, int dest_sq, int move_modifier) {
         // save that this player has castled
         if (board.arr[dest_sq] > 0) {
             // set the white has castled boolean to true
-            board.arr[101] = 7;
+            board.arr[BoardInd::whiteCastled] = BoardSq::yes;
         }
         else if (board.arr[dest_sq] < 0) {
             // set the black has castled boolean to true
-            board.arr[102] = 7;
+            board.arr[BoardInd::blackCastled] = BoardSq::yes;
         }
         else {
             throw std::runtime_error("castling logic failed, dest sq is empty");
@@ -799,11 +808,11 @@ void make_move(Board& board, int start_sq, int dest_sq, int move_modifier) {
     }
 
     // if the piece is promoting to a knight
-    else if (move_modifier == 6) {
+    else if (move_modifier == MoveMod::promoteN) {
         // change pawn (+1 or -1) to a knight of the same colour (+2 or -2)
-        board.arr[dest_sq] *= 2;
+        board.arr[dest_sq] *= BoardSq::wN;
         // check that it worked
-        if (abs(board.arr[dest_sq]) != 2) {
+        if (abs(board.arr[dest_sq]) != BoardSq::wN) {
             throw std::runtime_error("make_move has been asked to knight promote \
                                         a piece that isn't a pawn");
             
@@ -811,33 +820,33 @@ void make_move(Board& board, int start_sq, int dest_sq, int move_modifier) {
     }
 
     // if the piece is promoting to a queen
-    else if (move_modifier == 7) {
+    else if (move_modifier == MoveMod::promoteQ) {
         // change pawn (+1 or -1) to a queen of the same colour (+5 or -5)
-        board.arr[dest_sq] *= 5;
+        board.arr[dest_sq] *= BoardSq::wQ;
         // check that it worked
-        if (abs(board.arr[dest_sq]) != 5) {
+        if (abs(board.arr[dest_sq]) != BoardSq::wQ) {
             throw std::runtime_error("make_move has been asked to queen promote \
                                         a piece that isn't a pawn");
         }
     }
 
     // if the piece is promoting to a bishop
-    else if (move_modifier == 8) {
+    else if (move_modifier == MoveMod::promoteB) {
         // change pawn (+1 or -1) to a bishop of the same colour (+3 or -3)
-        board.arr[dest_sq] *= 3;
+        board.arr[dest_sq] *= BoardSq::wB;
         // check that it worked
-        if (abs(board.arr[dest_sq]) != 3) {
+        if (abs(board.arr[dest_sq]) != BoardSq::wB) {
             throw std::runtime_error("make_move has been asked to bishop promote \
                                         a piece that isn't a pawn");
         }
     }
 
     // if the piece is promoting to a rook
-    else if (move_modifier == 9) {
+    else if (move_modifier == MoveMod::promoteR) {
         // change pawn (+1 or -1) to a rook of the same colour (+4 or -4)
-        board.arr[dest_sq] *= 4;
+        board.arr[dest_sq] *= BoardSq::wR;
         // check that it worked
-        if (abs(board.arr[dest_sq]) != 4) {
+        if (abs(board.arr[dest_sq]) != BoardSq::wR) {
             throw std::runtime_error("make_move has been asked to rook promote \
                                         a piece that isn't a pawn");
         }
@@ -860,7 +869,7 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
     if (our_piece == 0) {
         throw std::invalid_argument("piece_attack_defend has been given our_piece = 0, ie empty square");
     }
-    else if (our_piece == 7 or our_piece == -7) {
+    else if (our_piece == BoardSq::yes or our_piece == BoardSq::no) {
         throw std::invalid_argument("piece_attack_defend has been given our_piece = 7, ie non legal square");
     }
     else if (our_piece < 0) { 
@@ -904,7 +913,7 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
     int pawn_defends[2];        // squares from which pawns can defend us
 
     // are we a pawn?
-    if (our_piece == 1 or our_piece == -1) { pawn = true; }
+    if (our_piece == BoardSq::wP or our_piece == BoardSq::bP) { pawn = true; }
 
     // define pawn behaviour
     en_passant[0] = square_num - 1;
@@ -1004,7 +1013,7 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                 sq_value = board.arr[dest_sq] * sign;
 
                 // is this square on the board? If not, this line is over
-                if (sq_value == 7 or sq_value == -7) break;
+                if (sq_value == BoardSq::yes or sq_value == BoardSq::no) break;
 
                 // does this square contain a piece
                 if (sq_value != 0) {
@@ -1025,7 +1034,7 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                             sq_value == move_group_two[i]) {
 
                             // check if its a pawn, which may not defend us
-                            if (first_loop and sq_value == 1) {
+                            if (first_loop and sq_value == BoardSq::wP) {
                                 if (dest_sq != pawn_defends[0] and
                                     dest_sq != pawn_defends[1]) {
                                     continue; // because the pawn is not defending
@@ -1058,7 +1067,7 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                         else { 
 
                             // add special behaviour for bishops/queens behind pawns
-                            if (sq_value == 1 and move_group_one[i] == 3 and
+                            if (sq_value == BoardSq::wP and move_group_one[i] == 3 and
                                 (dest_sq == pawn_defends[0] or
                                     dest_sq == pawn_defends[1])) {
 
@@ -1107,7 +1116,7 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                             sq_value == move_group_two[i]) {
 
                             // check if it's a pawn, which may not attack us
-                            if (first_loop and sq_value == 1) {
+                            if (first_loop and sq_value == BoardSq::wP) {
                                 
                                 // if we aren't on a square a pawn can attack us from
                                 if (dest_sq != pawn_attacks[0] and
@@ -1125,7 +1134,7 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                                     if (pawn and (dest_sq == en_passant[0] or
                                         dest_sq == en_passant[1])
                                         and (dest_sq / 10 == our_pass_rank + sign)) {
-                                        if (board.arr[our_pass_adj - (square_num + passant_sq)] == 7) {
+                                        if (board.arr[our_pass_adj - (square_num + passant_sq)] == BoardSq::yes) {
                                             // hence the pawn can attack us en passant
                                             output.attack_me.insert(output.attack_me.end(),
                                                 { dest_sq, sq_value, attack });
@@ -1211,7 +1220,7 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                         else {
 
                             // add special behaviour for bishops/queens behind pawns
-                            if (sq_value == 1 and move_group_one[i] == 3 and
+                            if (sq_value == BoardSq::wP and move_group_one[i] == 3 and
                                 (dest_sq == pawn_attacks[0] or
                                     dest_sq == pawn_attacks[1])) {
 
@@ -1317,7 +1326,7 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                         // check if our attack on this empty square is en passant
                         if (pawn and dest_sq / 10 == their_pass_rank) {
                             // is the passant boolean set to true
-                            if (board.arr[their_pass_adj - dest_sq] == 7) {
+                            if (board.arr[their_pass_adj - dest_sq] == BoardSq::yes) {
                                 output.attack_list.insert(output.attack_list.end(),
                                     { dest_sq, 1, -1 });
                                 continue;
@@ -1331,7 +1340,7 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
 
                     // if our piece is a king, this is a square he can be attacked from
                     // (avoid double counting in the first loop)
-                    if (our_piece == 6 and not first_loop) {
+                    if (our_piece == BoardSq::wK and not first_loop) {
                         output.attack_me.insert(output.attack_me.end(),
                             { dest_sq, 0, 0 });
                     }
@@ -1391,7 +1400,7 @@ int find_pins_checks(Board& board, bool& check, bool& pin, int king_index,
         }
 
         // pins/blocking check is not possible if the attacker is a knight
-        if (attack_piece == 2) {
+        if (attack_piece == BoardSq::wN) {
             // however it is possible to capture the knight
             block_check.push_back(attack_sq);
             continue;
@@ -1423,10 +1432,10 @@ int find_pins_checks(Board& board, bool& check, bool& pin, int king_index,
             line_sq = king_index + direction * l;
 
             // if the square is out of bounds, break
-            if (board.arr[line_sq] == 7 or
-                board.arr[line_sq] == -7) break;
+            if (board.arr[line_sq] == BoardSq::yes or
+                board.arr[line_sq] == BoardSq::no) break;
             // if the line square is empty
-            else if (board.arr[line_sq] == 0) {
+            else if (board.arr[line_sq] == BoardSq::empty) {
                 // then the square is along the pin/check line
                 move_set.push_back(line_sq);
             }
@@ -1436,13 +1445,11 @@ int find_pins_checks(Board& board, bool& check, bool& pin, int king_index,
                 move_set.push_back(line_sq);
                 break;
             }
-            // if we reach the piece that is pinned
-            else if (maybe_pin and board.arr[line_sq] * player_colour > 0) {
+            // if we see any pieces along the way (>1 means not a pin)
+            else if (maybe_pin and board.arr[line_sq] != BoardSq::empty) {
                 pinned_piece.push_back(line_sq);
-                // testing-----------
                 pinned_moves.push_back(0);
                 pinned_moves.push_back(line_sq);
-                //-------------------
                 num_pinned += 1;
             }
         }
@@ -1465,17 +1472,12 @@ int find_pins_checks(Board& board, bool& check, bool& pin, int king_index,
                     move_set.end());
             }
             // if we found two pinned pieces, it is not a pin at all
-            /* the cause of this error is not clear, but I believe it arises
-            * from bishops/queens along the same diagonal as a king being then
-            * pinned by a piece */
             else if (num_pinned > 1) {
                 // remove the pinned pieces we thought we had
                 while (num_pinned > 0) {
                     pinned_piece.pop_back();
-                    // testing------------------
                     pinned_moves.pop_back();
                     pinned_moves.pop_back();
-                    // -------------------------
                     num_pinned -= 1;
                 }
             }
@@ -1537,7 +1539,7 @@ bool king_walks(Board& board, int king_index, int player_colour,
     }
 
     // return the king to board
-    board.set(king_index, 6 * player_colour);
+    board.set(king_index, BoardSq::wK * player_colour);
 
     return any_escape;
 }
@@ -1673,7 +1675,7 @@ bool is_checkmate(Board& board, int king_index, int player_colour,
     for (int square : block_check) {
 
         // analyse the square as if a king were on it
-        pad_struct = piece_attack_defend(board, square, 6, player_colour);
+        pad_struct = piece_attack_defend(board, square, BoardSq::wK, player_colour);
 
         // pawn moves are the only type not included in defend_me
         // a square must be empty for a pawn to move to it
@@ -1699,7 +1701,7 @@ bool is_checkmate(Board& board, int king_index, int player_colour,
                 if (view == pawn_square_one or
                     view == pawn_square_two) {
                     // is one of our pawns
-                    if (board.arr[view] == 1 * player_colour) {
+                    if (board.arr[view] == BoardSq::wP * player_colour) {
                         // is this piece pinned
                         if (pin and is_in(pinned_piece, view)) {
                             my_pinned_moves.clear();   // reset this to empty
@@ -1728,12 +1730,12 @@ bool is_checkmate(Board& board, int king_index, int player_colour,
             defend_mod = pad_struct.defend_me[(i * 3) + 2];
 
             // check if the piece in question is a king - it can't block itself
-            if (defend_piece == 6) {
+            if (defend_piece == BoardSq::wK) {
                 continue;
             }
 
             // check if the piece is a pawn
-            if (defend_piece == 1) {
+            if (defend_piece == BoardSq::wP) {
                 // it cannot move to this square unless it is a capture
                 if (board.arr[square] == 0) {
                     continue;
@@ -1777,10 +1779,10 @@ bool test_checkmate(Board& board, int player_colour) {
             index = (2 + i) * 10 + (j + 1);
 
             // have we found the king
-            if (board.arr[index] == player_colour * 6) {
+            if (board.arr[index] == player_colour * BoardSq::wK) {
 
                 king_index = index;
-                king_pad_struct = piece_attack_defend(board, king_index, 6, player_colour);
+                king_pad_struct = piece_attack_defend(board, king_index, BoardSq::wK, player_colour);
 
                 mate = is_checkmate(board, king_index, player_colour, king_pad_struct);
 
@@ -1803,44 +1805,44 @@ int tempo_check(Board& board, bool white_to_play) {
     else tempo = -1;
 
     // white pieces
-    //if (board.arr[21] != 4) tempo += 1;
-    if (board.arr[22] != 2) tempo += 1;
-    if (board.arr[23] != 3) tempo += 1;
-    if (board.arr[24] != 6) tempo += 1;
-    //if (board.arr[25] != 5) tempo += 1;
-    if (board.arr[26] != 3) tempo += 1;
-    if (board.arr[27] != 2) tempo += 1;
-    //if (board.arr[28] != 4) tempo += 1;
+    //if (board.arr[21] != BoardSq::wR) tempo += 1;
+    if (board.arr[22] != BoardSq::wN) tempo += 1;
+    if (board.arr[23] != BoardSq::wB) tempo += 1;
+    if (board.arr[24] != BoardSq::wK) tempo += 1;
+    //if (board.arr[25] != BoardSq::wQ) tempo += 1;
+    if (board.arr[26] != BoardSq::wB) tempo += 1;
+    if (board.arr[27] != BoardSq::wN) tempo += 1;
+    //if (board.arr[28] != BoardSq::wR) tempo += 1;
 
     // white pawns
-    //if (board.arr[31] != 1) tempo += 1;
-    //if (board.arr[32] != 1) tempo += 1;
-    //if (board.arr[33] != 1) tempo += 1;
-    if (board.arr[34] != 1) tempo += 1;
-    if (board.arr[35] != 1) tempo += 1;
-    if (board.arr[36] != 1) tempo += 1;
-    //if (board.arr[37] != 1) tempo += 1;
-    //if (board.arr[38] != 1) tempo += 1;
+    //if (board.arr[31] != BoardSq::wP) tempo += 1;
+    //if (board.arr[32] != BoardSq::wP) tempo += 1;
+    //if (board.arr[33] != BoardSq::wP) tempo += 1;
+    if (board.arr[34] != BoardSq::wP) tempo += 1;
+    if (board.arr[35] != BoardSq::wP) tempo += 1;
+    if (board.arr[36] != BoardSq::wP) tempo += 1;
+    //if (board.arr[37] != BoardSq::wP) tempo += 1;
+    //if (board.arr[38] != BoardSq::wP) tempo += 1;
 
     // black pieces
-    //if (board.arr[91] != -4) tempo -= 1;
-    if (board.arr[92] != -2) tempo -= 1;
-    if (board.arr[93] != -3) tempo -= 1;
-    if (board.arr[94] != -6) tempo -= 1;
-    //if (board.arr[95] != -5) tempo -= 1;
-    if (board.arr[96] != -3) tempo -= 1;
-    if (board.arr[97] != -2) tempo -= 1;
-    //if (board.arr[98] != -4) tempo -= 1;
+    //if (board.arr[91] != BoardSq::bR) tempo -= 1;
+    if (board.arr[92] != BoardSq::bN) tempo -= 1;
+    if (board.arr[93] != BoardSq::bB) tempo -= 1;
+    if (board.arr[94] != BoardSq::bK) tempo -= 1;
+    //if (board.arr[95] != BoardSq::bQ) tempo -= 1;
+    if (board.arr[96] != BoardSq::bB) tempo -= 1;
+    if (board.arr[97] != BoardSq::bN) tempo -= 1;
+    //if (board.arr[98] != BoardSq::bR) tempo -= 1;
 
     // black pawns
-    //if (board.arr[81] != -1) tempo -= 1;
-    //if (board.arr[82] != -1) tempo -= 1;
-    //if (board.arr[83] != -1) tempo -= 1;
-    if (board.arr[84] != -1) tempo -= 1;
-    if (board.arr[85] != -1) tempo -= 1;
-    if (board.arr[86] != -1) tempo -= 1;
-    //if (board.arr[87] != -1) tempo -= 1;
-    //if (board.arr[88] != -1) tempo -= 1;
+    //if (board.arr[81] != BoardSq::bP) tempo -= 1;
+    //if (board.arr[82] != BoardSq::bP) tempo -= 1;
+    //if (board.arr[83] != BoardSq::bP) tempo -= 1;
+    if (board.arr[84] != BoardSq::bP) tempo -= 1;
+    if (board.arr[85] != BoardSq::bP) tempo -= 1;
+    if (board.arr[86] != BoardSq::bP) tempo -= 1;
+    //if (board.arr[87] != BoardSq::bP) tempo -= 1;
+    //if (board.arr[88] != BoardSq::bP) tempo -= 1;
 
     return tempo;
 }
@@ -1945,8 +1947,10 @@ phase_struct determine_phase(Board& board, bool white_to_play) {
     phase.phase = 1;
 
     // if both players have castled or lost rights, phase 2
-    if (board.arr[0] == -7 and board.arr[1] == -7 and
-        board.arr[2] == -7 and board.arr[3] == -7) {
+    if (board.arr[BoardInd::castleWK] == BoardSq::no and 
+        board.arr[BoardInd::castleWQ] == BoardSq::no and
+        board.arr[BoardInd::castleBK] == BoardSq::no and 
+        board.arr[BoardInd::castleBQ] == BoardSq::no) {
 
         phase.phase = 2;
 
@@ -1971,10 +1975,10 @@ phase_struct determine_phase(Board& board, bool white_to_play) {
                 }
 
                 // check if we have reached a queen
-                if (board.arr[index] == 5) {
+                if (board.arr[index] == BoardSq::wQ) {
                     wQ_gone = false;
                 }
-                if (board.arr[index] == -5) {
+                if (board.arr[index] == BoardSq::bQ) {
                     bQ_gone = false;
                 }
             }
@@ -2054,16 +2058,22 @@ phase_struct determine_phase(Board& board, bool white_to_play) {
     phase.evaluation_adjust = 0;
 
     // reward castling by checking the two 'has castled' booleans
-    if (board.arr[101] == 7) phase.evaluation_adjust += phase.castle_bonus;
+    if (board.arr[BoardInd::whiteCastled] == BoardSq::yes) {
+        phase.evaluation_adjust += phase.castle_bonus;
+    }
     else {
         // if not castled, punish if castle rights have been lost
-        if (board.arr[0] == -7 and board.arr[1] == -7)
+        if (board.arr[BoardInd::castleWK] == BoardSq::no and 
+            board.arr[BoardInd::castleWQ] == BoardSq::no)
             phase.evaluation_adjust -= phase.castle_bonus / 2;
     }
-    if (board.arr[102] == 7) phase.evaluation_adjust -= phase.castle_bonus;
+    if (board.arr[BoardInd::blackCastled] == BoardSq::yes) {
+        phase.evaluation_adjust -= phase.castle_bonus;
+    }
     else {
         // if not castled, punish if castle rights have been lost
-        if (board.arr[2] == -7 and board.arr[3] == -7)
+        if (board.arr[BoardInd::castleBK] == BoardSq::no and 
+            board.arr[BoardInd::castleBQ] == BoardSq::no)
             phase.evaluation_adjust += phase.castle_bonus / 2;
     }
 
@@ -2096,8 +2106,8 @@ int is_passed_pawn(Board& board, int our_colour, int square_num) {
     // loop downwards along the column we are on
     for (int i = 1; i < 8; i++) {
         // have we got to the end of the board without finding an opposition pawn
-        if (board.arr[(row + i * our_colour) * 10 + col] == -7 or
-            board.arr[(row + i * our_colour) * 10 + col] == 7) {
+        if (board.arr[(row + i * our_colour) * 10 + col] == BoardSq::no or
+            board.arr[(row + i * our_colour) * 10 + col] == BoardSq::yes) {
             return i - 1;
         }
         // does this column or either adjacent one contain an opposition pawn
@@ -2112,12 +2122,12 @@ int is_passed_pawn(Board& board, int our_colour, int square_num) {
 int piece_value(int piece_num) {
     /* This function converts a piece number into a piece value */
 
-    if (piece_num == 1 or piece_num == -1)      return 1;
-    else if (piece_num == 2 or piece_num == -2) return 3;
-    else if (piece_num == 3 or piece_num == -3) return 3;
-    else if (piece_num == 4 or piece_num == -4) return 5;
-    else if (piece_num == 5 or piece_num == -5) return 9;
-    else if (piece_num == 6 or piece_num == -6) return 4;
+    if (piece_num == BoardSq::wP or piece_num == BoardSq::bP) return 1;
+    else if (piece_num == BoardSq::wN or piece_num == BoardSq::bN) return 3;
+    else if (piece_num == BoardSq::wB or piece_num == BoardSq::bB) return 3;
+    else if (piece_num == BoardSq::wR or piece_num == BoardSq::bR) return 5;
+    else if (piece_num == BoardSq::wQ or piece_num == BoardSq::bQ) return 9;
+    else if (piece_num == BoardSq::wK or piece_num == BoardSq::bK) return 4;
     else {
         throw std::invalid_argument{ "bad input to piece_value" };
     }
@@ -2224,7 +2234,7 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
         }
         // score the attack better if it attacks a piece
         else if (attack_mod == -1 or
-            attack_mod == -2 or
+            attack_mod == BoardSq::bN or
             attack_mod == -3) {
 
             attack_score += 10;      // attack on a piece
@@ -2244,33 +2254,33 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
     /* Potential is a score based on the maximum number of squares a piece can
        attack. One point given for squares in an opponents half, 0.5 points given
        for squares in our half. */
-    if (our_piece == 1) {       // pawn   2     (0)
+    if (our_piece == BoardSq::wP) {       // pawn   2     (0)
         pawn = true;
         value = 1;
         potential = 2;
         attack_bonus = phase.pawn_mod * (attack_score / potential);
     }
-    else if (our_piece == 2) {  // knight 6     (2)
+    else if (our_piece == BoardSq::wN) {  // knight 6     (2)
         value = 3;
         potential = 7;
         attack_bonus = phase.knight_mod * (attack_score / potential);
     }
-    else if (our_piece == 3) {  // bishop 6     (7)
+    else if (our_piece == BoardSq::wB) {  // bishop 6     (7)
         value = 3;
         potential = 10;
         attack_bonus = phase.bishop_mod * (attack_score / potential);
     }
-    else if (our_piece == 4) {  // rook   10    (4)
+    else if (our_piece == BoardSq::wR) {  // rook   10    (4)
         value = 5;
         potential = 12;
         attack_bonus = phase.rook_mod * (attack_score / potential);
     }
-    else if (our_piece == 5) {  // queen  16    (11)
+    else if (our_piece == BoardSq::wQ) {  // queen  16    (11)
         value = 9;
         potential = 22;
         attack_bonus = phase.queen_mod * (attack_score / potential);
     }
-    else if (our_piece == 6) {  // king   8     (0)
+    else if (our_piece == BoardSq::wK) {  // king   8     (0)
         value = 4;
         potential = 8;
         attack_bonus = phase.king_mod * (attack_score / potential);
@@ -2311,7 +2321,7 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
     bool king_involved = false;     // is the king involved in tactics
 
     // if the piece in question is the king, things are different
-    if (our_piece == 6) {
+    if (our_piece == BoardSq::wK) {
 
         int checks = 0;
         int vunerability_score = 0; // rating for the defensive vunerability of the king
@@ -2503,7 +2513,7 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
                 }
 
                 // if the last defender is a king and capturing back is illegal
-                if (defender_order[i] == 6 and attacker_order.size() > i + 1) {
+                if (defender_order[i] == BoardSq::wK and attacker_order.size() > i + 1) {
                     // the piece is lost
                     trade_outcome -= 1000 * square_value;
                     break;
@@ -2516,7 +2526,7 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
                 }
 
                 // if their attacker is their king, and our defender is not our king
-                if (attacker_order[i] == 6 and defender_order[i] != 6) {
+                if (attacker_order[i] == BoardSq::wK and defender_order[i] != BoardSq::wK) {
                     // it is illegal to capture
                     break;
                 }
@@ -2577,6 +2587,83 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
     return evaluation * our_colour;
 }
 
+std::vector<int> eval_squares(Board& board, bool white_to_play)
+{
+    /* return the evaluation of each square on the board */
+
+    std::vector<int> sq_evals(64);
+
+    int evaluation = 0;         // the evaulation starts at zero
+    int this_eval;              // evaluation of current square
+    int index;                  // board square index
+    int vec_ind;                // sq_evals vector index
+    int piece_type;             // the type of piece
+    int piece_colour;           // the colour of the piece
+    bool mate = false;          // is it checkmate
+
+    // determine the phase of the game
+    phase_struct phase = determine_phase(board, white_to_play);
+
+    // update the evaluation based on the phase of play
+    evaluation += phase.evaluation_adjust;
+
+    // loop through every square of the board
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+
+            index = (2 + i) * 10 + (j + 1);
+            vec_ind = (i * 8) + j;
+
+            this_eval = 0;
+
+            // if the square contains a piece, find its evalution
+            if (board.arr[index] != BoardSq::empty) {
+
+                // extract the relevant information about the square
+                if (board.arr[index] < 0) {
+                    piece_type = board.arr[index] * -1;
+                    piece_colour = -1;
+                }
+                else {
+                    piece_type = board.arr[index];
+                    piece_colour = 1;
+                }
+
+                // analyse the piece
+                piece_attack_defend_struct pad_struct = piece_attack_defend(board,
+                                                   index, piece_type, piece_colour);
+
+                // evaluate the piece
+                int piece_eval = eval_piece(board, white_to_play, index,
+                    phase, piece_type, piece_colour, mate, pad_struct);
+
+                // have we found checkmate
+                if (mate) {
+                    if (white_to_play) {
+                        this_eval = WHITE_MATED;
+                    }
+                    else {
+                        this_eval = BLACK_MATED;
+                    }
+                }
+                else {
+                    this_eval = piece_eval;
+                }
+
+                //// FOR TESTING
+                //std::cout << "The piece on square " << index
+                //    << " has evaluation " << piece_eval.eval * piece_colour
+                //    << " and null eval " << piece_eval.null_eval << '\n';
+            }
+
+            // record the evaluation of this square
+            sq_evals[vec_ind] = this_eval;
+        }
+    }
+   
+    return sq_evals;
+}
+
 int eval_board(Board& board, bool white_to_play) 
 {  /* This function evalutes the board to decide who is winning */
 
@@ -2599,7 +2686,7 @@ int eval_board(Board& board, bool white_to_play)
             index = (2 + i) * 10 + (j + 1);
 
             // if the square contains a piece, find its evalution
-            if (board.arr[index] != 0) {
+            if (board.arr[index] != BoardSq::empty) {
 
                 // extract the relevant information about the square
                 if (board.arr[index] < 0) {
@@ -2678,7 +2765,8 @@ std::vector<int> find_view(Board& board, int square_num)
                 dest_sq += move_dist;
 
                 // is this square on the board? If not, this line is over
-                if (board.arr[dest_sq] == 7 or board.arr[dest_sq] == -7) break;
+                if (board.arr[dest_sq] == BoardSq::yes or 
+                    board.arr[dest_sq] == BoardSq::no) break;
 
                 // does this square contain a piece
                 if (board.arr[dest_sq] != 0) {
@@ -2794,7 +2882,7 @@ total_legal_moves_struct total_legal_moves(Board& board, bool white_to_play) {
                 //}
 
                 // check if this piece is our king
-                if (piece_type == 6 and piece_colour == player_colour) {
+                if (piece_type == BoardSq::wK and piece_colour == player_colour) {
                     king_index = index;
                 }
                 // if not, save the location of this piece
@@ -2882,7 +2970,7 @@ total_legal_moves_struct total_legal_moves(Board& board, bool white_to_play) {
             d_ind = (ind - 21) - 2 * ((ind / 10) - 2);
 
             // if the piece is a pawn, then it has different legal moves
-            if (board.arr[ind] == 1 or board.arr[ind] == -1) {
+            if (board.arr[ind] == BoardSq::wP or board.arr[ind] == BoardSq::bP) {
 
                 // first, determine if this piece is pinned
                 i_am_pinned = false;
@@ -2909,18 +2997,39 @@ total_legal_moves_struct total_legal_moves(Board& board, bool white_to_play) {
                             continue;
                         }
                     }
+
                     // if our king is in check
                     if (check) {
                         // only a block or capture of checking piece is legal
                         if (not (is_in(block_check, attack_sq))) {
+
+                            // the only exception is an enpassant capture
+                            // if white to play, we are looking at a black pawn move
+                            int en_pass_bool = (not white_to_play ?
+                                                    53 - attack_sq
+                                                  : 91 - attack_sq);
+                            int target_rank = (not white_to_play ? 4 : 7);
+                            int pawn_square = attack_sq - 10 * player_colour;
+
+                            // check if an en passant capture is possible
+                            if (attack_sq / 10 == target_rank and
+                                board.arr[en_pass_bool] == BoardSq::yes and
+                                board.arr[attack_sq] == BoardSq::empty and
+                                board.arr[pawn_square] == -1 * player_colour * BoardSq::wP) {
+                                move_mod = MoveMod::captureEnPassant;
+                                data_array.legal_moves.push_back(ind);
+                                data_array.legal_moves.push_back(attack_sq);
+                                data_array.legal_moves.push_back(move_mod);
+                            }
+
                             continue;
                         }
                     }
                     // hence, any piece we attack allows us to move to that square
                     if (attack_mod == -1) {
                         // if the destination square is empty, it is en passant
-                        if (board.arr[attack_sq] == 0) {
-                            move_mod = 3;
+                        if (board.arr[attack_sq] == BoardSq::empty) {
+                            move_mod = MoveMod::captureEnPassant;
                             data_array.legal_moves.push_back(ind);
                             data_array.legal_moves.push_back(attack_sq);
                             data_array.legal_moves.push_back(move_mod);
@@ -2930,23 +3039,23 @@ total_legal_moves_struct total_legal_moves(Board& board, bool white_to_play) {
                             // move_mod = 6: promote to knight
                             data_array.legal_moves.push_back(ind);
                             data_array.legal_moves.push_back(attack_sq);
-                            data_array.legal_moves.push_back(6);
+                            data_array.legal_moves.push_back(MoveMod::promoteN);
                             // move_mod = 7: promote to queen
                             data_array.legal_moves.push_back(ind);
                             data_array.legal_moves.push_back(attack_sq);
-                            data_array.legal_moves.push_back(7);
+                            data_array.legal_moves.push_back(MoveMod::promoteQ);
                             // move_mod = 8: promote to bishop
                             data_array.legal_moves.push_back(ind);
                             data_array.legal_moves.push_back(attack_sq);
-                            data_array.legal_moves.push_back(8);
+                            data_array.legal_moves.push_back(MoveMod::promoteB);
                             // move_mod = 9: promote to rook
                             data_array.legal_moves.push_back(ind);
                             data_array.legal_moves.push_back(attack_sq);
-                            data_array.legal_moves.push_back(9);
+                            data_array.legal_moves.push_back(MoveMod::promoteR);
                         }
                         // else it is a completely normal capture
                         else {
-                            move_mod = 2;
+                            move_mod = MoveMod::capture;
                             data_array.legal_moves.push_back(ind);
                             data_array.legal_moves.push_back(attack_sq);
                             data_array.legal_moves.push_back(move_mod);
@@ -2957,32 +3066,31 @@ total_legal_moves_struct total_legal_moves(Board& board, bool white_to_play) {
                 // now check if this pawn can move forwards normally
 
                 // if the square ahead of us is empty, we can move there
-                if (board.arr[ind + pawn_move] == 0 and
+                if (board.arr[ind + pawn_move] == BoardSq::empty and
                     (not check or is_in(block_check, ind + pawn_move)) and
-                    not (i_am_pinned and
-                        not (is_in(pinned_moves, ind + pawn_move)))) {
+                     not (i_am_pinned and not (is_in(my_pinned_moves, ind + pawn_move)))) {
                     // is this move a promotion
                     if ((ind + pawn_move) / 10 == pawn_promote) {
                         // move_mod = 6: promote to knight
                         data_array.legal_moves.push_back(ind);
                         data_array.legal_moves.push_back(ind + pawn_move);
-                        data_array.legal_moves.push_back(6);
+                        data_array.legal_moves.push_back(MoveMod::promoteN);
                         // move_mod = 7: promote to queen
                         data_array.legal_moves.push_back(ind);
                         data_array.legal_moves.push_back(ind + pawn_move);
-                        data_array.legal_moves.push_back(7);
+                        data_array.legal_moves.push_back(MoveMod::promoteQ);
                         // move_mod = 8: promote to bishop
                         data_array.legal_moves.push_back(ind);
                         data_array.legal_moves.push_back(ind + pawn_move);
-                        data_array.legal_moves.push_back(8);
+                        data_array.legal_moves.push_back(MoveMod::promoteB);
                         // move_mod = 9: promote to rook
                         data_array.legal_moves.push_back(ind);
                         data_array.legal_moves.push_back(ind + pawn_move);
-                        data_array.legal_moves.push_back(9);
+                        data_array.legal_moves.push_back(MoveMod::promoteR);
                     }
                     // else it is not a promotion
                     else {
-                        move_mod = 1;
+                        move_mod = MoveMod::moveToEmpty;
                         data_array.legal_moves.push_back(ind);
                         data_array.legal_moves.push_back(ind + pawn_move);
                         data_array.legal_moves.push_back(move_mod);
@@ -2990,12 +3098,12 @@ total_legal_moves_struct total_legal_moves(Board& board, bool white_to_play) {
                 }
                 // if we haven't moved yet, we may be able to move two spaces
                 if (ind / 10 == pawn_start and
-                    board.arr[ind + pawn_move] == 0 and
-                    board.arr[ind + 2 * pawn_move] == 0 and
+                    board.arr[ind + pawn_move] == BoardSq::empty and
+                    board.arr[ind + 2 * pawn_move] == BoardSq::empty and
                     (not check or is_in(block_check, ind + 2 * pawn_move)) and
                     not (i_am_pinned and
-                        not (is_in(pinned_moves, ind + 2 * pawn_move)))) {
-                    move_mod = 1;
+                        not (is_in(my_pinned_moves, ind + 2 * pawn_move)))) {
+                    move_mod = MoveMod::moveToEmpty;
                     data_array.legal_moves.push_back(ind);
                     data_array.legal_moves.push_back(ind + 2 * pawn_move);
                     data_array.legal_moves.push_back(move_mod);
@@ -3039,14 +3147,14 @@ total_legal_moves_struct total_legal_moves(Board& board, bool white_to_play) {
 
                     // if a square is attacked, we can move there
                     if (attack_mod == 0) {
-                        move_mod = 1;
+                        move_mod = MoveMod::moveToEmpty;
                         data_array.legal_moves.push_back(ind);
                         data_array.legal_moves.push_back(attack_sq);
                         data_array.legal_moves.push_back(move_mod);
                     }
                     // if a piece is attacked, we can capture
                     else if (attack_mod == -1) {
-                        move_mod = 2;
+                        move_mod = MoveMod::capture;
                         data_array.legal_moves.push_back(ind);
                         data_array.legal_moves.push_back(attack_sq);
                         data_array.legal_moves.push_back(move_mod);
@@ -3148,10 +3256,10 @@ bool verify_checkmate(Board& board, bool white_to_play)
             index = (2 + i) * 10 + (j + 1);
 
             // have we found the king
-            if (board.arr[index] == player_colour * 6) {
+            if (board.arr[index] == player_colour * BoardSq::wK) {
 
                 king_index = index;
-                king_pad_struct = piece_attack_defend(board, king_index, 6, player_colour);
+                king_pad_struct = piece_attack_defend(board, king_index, BoardSq::wK, player_colour);
 
                 mate = is_checkmate(board, king_index, player_colour, king_pad_struct);
 
@@ -3174,6 +3282,28 @@ bool verify_checkmate(Board& board, bool white_to_play)
     return false;
 }
 
+generated_moves_struct generate_moves_FEN(std::string fen) 
+{
+    /* wraps a FEN decode call, and then generates the moves */
+
+    Board board = FEN_to_board(fen);
+
+    // extract who plays next
+    bool white_to_play;
+    if (does_white_play_next(board)) {
+        white_to_play = true;
+    }
+    else if (does_black_play_next(board)) {
+        white_to_play = false;
+    }
+    else {
+        std::cout << "FEN string: " << fen << "\n";
+        throw std::runtime_error("generate_moves_FEN() error: who plays next was NOT extracted from fen string");
+    }
+
+    return generate_moves(board, white_to_play);
+}
+
 generated_moves_struct generate_moves(Board& board, bool white_to_play) 
 {
     /* This function finds the best moves to play in a given board, and returns
@@ -3184,6 +3314,18 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
     std::vector<int> piece_view;                    // piece views
     bool mate = false;                              // checkmate found?
     bool next_to_play = not white_to_play;          // who plays next
+
+    /* set in the board who plays next, so hashes of the same board with a different
+    person to play next will be different in the move tree. These 'who plays next'
+    flags are not used for any other function in the entire codebase, except to save
+    who is playing next when extracting from FEN strings. In every other case, the
+    boolean 'white_to_play' is used instead, alongside the board. */
+    if (white_to_play) {
+        set_white_plays_next(board);
+    }
+    else {
+        set_black_plays_next(board);
+    }
 
     // save the starting board
     generated_moves.base_board = board;
@@ -3221,7 +3363,7 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
         // has the destination square not already got piece view filled in
         if (tlm_struct.square_info[dest_ind].piece_view.size() == 0) {
             // we need to find the piece view (any piece/colour will do)
-            temp_pad_struct = piece_attack_defend(board, dest_sq, 6, 1);
+            temp_pad_struct = piece_attack_defend(board, dest_sq, BoardSq::wK, 1);
             piece_view = temp_pad_struct.piece_view;
             //piece_view = find_view(board, dest_sq);
         }
@@ -3248,13 +3390,13 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
         //std::cout << "\n";
 
         // if it is a capture of a pawn, or by a pawn, we may create a passed pawn
-        if (move_mod == 2) {
+        if (move_mod == MoveMod::capture) {
 
             int pawn_step = 0;
             int step_start[2];
 
             // if a pawn is capturing, its movement may create enemy passed pawns
-            if (board.arr[start_sq] == 1 or board.arr[start_sq] == -1) {
+            if (board.arr[start_sq] == BoardSq::wP or board.arr[start_sq] == BoardSq::bP) {
 
                 // which way to step to find enemy pawns
                 if (next_to_play) pawn_step = -10;
@@ -3271,10 +3413,12 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
                 }
 
                 for (int step : step_start) {
-                    if (board.arr[step] != 7 and board.arr[step] != -7) {
+                    if (board.arr[step] != BoardSq::yes and 
+                        board.arr[step] != BoardSq::no) {
                         for (int i = 0; i < 7; i++) {
                             step += pawn_step;
-                            if (board.arr[step] == 1 or board.arr[step] == -1) {
+                            if (board.arr[step] == BoardSq::wP or 
+                                board.arr[step] == BoardSq::bP) {
                                 // if we find a pawn, finish searching
                                 if (not is_in(piece_view, step)) {
                                     piece_view.push_back(step);
@@ -3289,8 +3433,8 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
                                 }
                                 break;
                             }
-                            else if (board.arr[step] == -7 or
-                                board.arr[step] == 7) {
+                            else if (board.arr[step] == BoardSq::no or
+                                     board.arr[step] == BoardSq::yes) {
                                 break;
                             }
                         }
@@ -3299,7 +3443,8 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
             }
 
             // if a pawn is being captured, we may create our own passed pawns
-            if (board.arr[dest_sq] == 1 or board.arr[dest_sq] == -1) {
+            if (board.arr[dest_sq] == BoardSq::wP or 
+                board.arr[dest_sq] == BoardSq::bP) {
 
                 // which way to step to find our pawns
                 if (next_to_play) pawn_step = 10;
@@ -3310,10 +3455,12 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
                 step_start[1] = dest_sq + 1;
 
                 for (int step : step_start) {
-                    if (board.arr[step] != 7 and board.arr[step] != -7) {
+                    if (board.arr[step] != BoardSq::yes and 
+                        board.arr[step] != BoardSq::no) {
                         for (int i = 0; i < 7; i++) {
                             step += pawn_step;
-                            if (board.arr[step] == 1 or board.arr[step] == -1) {
+                            if (board.arr[step] == BoardSq::wP or 
+                                board.arr[step] == BoardSq::bP) {
                                 // if we find a pawn, finish searching
                                 if (not is_in(piece_view, step)) {
                                     piece_view.push_back(step);
@@ -3328,8 +3475,8 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
                                 }
                                 break;
                             }
-                            else if (board.arr[step] == -7 or
-                                board.arr[step] == 7) {
+                            else if (board.arr[step] == BoardSq::no or
+                                     board.arr[step] == BoardSq::yes) {
                                 break;
                             }
                         }
@@ -3339,7 +3486,7 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
         }
 
         // if it is capture en passant, ensure we include the captured square
-        if (move_mod == 3) {
+        if (move_mod == MoveMod::captureEnPassant) {
             if (white_to_play) {
                 if (not is_in(piece_view, dest_sq - 10)) {
                     piece_view.push_back(dest_sq - 10);
@@ -3353,7 +3500,7 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
         }
 
         // castling
-        if (move_mod == 5) {
+        if (move_mod == MoveMod::castle) {
             // where does the rook end up
             int rook_sq;
             // queenside castle
@@ -3366,7 +3513,7 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
             }
 
             // we need to find the piece view of the rook
-            temp_pad_struct = piece_attack_defend(board, rook_sq, 6, 1);
+            temp_pad_struct = piece_attack_defend(board, rook_sq, BoardSq::wK, 1);
 
             // add the piece view of the rook after moving (without duplicates)
             for (int v : temp_pad_struct.piece_view) {
@@ -3518,12 +3665,12 @@ bool is_promotion(Board& board, bool white_to_play, std::string move_letters)
     int start_sq = square_letters_to_numbers(move_letters.substr(0, 2));
     int dest_sq = square_letters_to_numbers(move_letters.substr(2, 2));
 
-    if (board.arr[start_sq] == 1 and white_to_play) {
+    if (board.arr[start_sq] == BoardSq::wP and white_to_play) {
         if (start_sq / 10 == 8 and dest_sq / 10 == 9) {
             return true;
         }
     }
-    else if (board.arr[start_sq] == -1 and not white_to_play) {
+    else if (board.arr[start_sq] == BoardSq::bP and not white_to_play) {
         if (start_sq / 10 == 3 and dest_sq / 10 == 2) {
             return true;
         }
@@ -3588,18 +3735,18 @@ verified_move verify_move(Board& board, bool white_to_play, std::string move_let
     // if a promotion choice has been given
 
     // if the move is a promotion
-    if (move.move_mod == 10) {
+    if (move.move_mod == MoveMod::promotionAny) {
         if (move_letters.size() == 5) {
             switch (move_letters[4]) {
-            case 'n': move.move_mod = 6; break;
-            case 'q': move.move_mod = 7; break;
-            case 'b': move.move_mod = 8; break;
-            case 'r': move.move_mod = 9; break;
+            case 'n': move.move_mod = MoveMod::promoteN; break;
+            case 'q': move.move_mod = MoveMod::promoteQ; break;
+            case 'b': move.move_mod = MoveMod::promoteB; break;
+            case 'r': move.move_mod = MoveMod::promoteR; break;
             }
         }
         else {
             // default is queen promote
-            move.move_mod = 7;
+            move.move_mod = MoveMod::promoteQ;
         }
     }
 
@@ -3636,11 +3783,11 @@ verified_move verify_move(Board& board, bool white_to_play, int start_sq, int de
     }
 
     // if the move is promotion, set move_mod=10 to indicate this
-    if (move.move_mod == 6 or
-        move.move_mod == 7 or
-        move.move_mod == 8 or
-        move.move_mod == 9) {
-        move.move_mod = 10;
+    if (move.move_mod == MoveMod::promoteN or
+        move.move_mod == MoveMod::promoteQ or
+        move.move_mod == MoveMod::promoteR or
+        move.move_mod == MoveMod::promoteB) {
+        move.move_mod = MoveMod::promotionAny;
     }
 
     return move;
@@ -3699,9 +3846,9 @@ bool are_boards_identical(Board first, Board second)
     for (int i = 0; i < 120; i++) {
 
         // ignore the exceptions
-        //if (i == 4) continue;       // the passant wipe boolean
-        if (i == 100) continue;     // phase flag
-
+        if (i == BoardInd::passantWipe) continue;       // the passant wipe boolean
+        if (i == BoardInd::whitePlaysNext) continue;       // flags for who is next
+        if (i == BoardInd::blackPlaysNext) continue;       // flags for who is next
 
         if (first.arr[i] != second.arr[i]) {
             std::cout << "Board difference at index " << i << ". First board "
@@ -3726,11 +3873,53 @@ Board copy_board(Board& base_board)
     return new_board;
 }
 
+// these are currently ONLY used for FEN->board and then generate_moves
+bool does_white_play_next(std::string fen) {
+    Board board = FEN_to_board(fen);
+    return does_white_play_next(board);
+}
+
+bool does_black_play_next(std::string fen) {
+    Board board = FEN_to_board(fen);
+    return does_black_play_next(board);
+}
+
+bool does_white_play_next(Board& board) {
+    return (board.arr[BoardInd::whitePlaysNext] == BoardSq::yes);
+}
+
+bool does_black_play_next(Board& board) {
+    return (board.arr[BoardInd::blackPlaysNext] == BoardSq::yes);
+}
+
+void set_white_plays_next(Board& board) {
+    board.arr[BoardInd::whitePlaysNext] = BoardSq::yes;
+    board.arr[BoardInd::blackPlaysNext] = BoardSq::no;
+}
+
+void set_black_plays_next(Board& board) {
+    board.arr[BoardInd::whitePlaysNext] = BoardSq::no;
+    board.arr[BoardInd::blackPlaysNext] = BoardSq::yes;
+}
+
+void wipe_any_plays_next(Board& board) {
+    board.arr[BoardInd::whitePlaysNext] = BoardSq::no;
+    board.arr[BoardInd::blackPlaysNext] = BoardSq::no;
+}
+
+bool is_white_next_FEN(std::string fen)
+{
+    Board board = FEN_to_board(fen);
+    return does_white_play_next(board);
+}
+
 Board FEN_to_board(std::string fen)
 {
     /* convert from FEN notation to a board state */
 
-    std::cout << "FEN_to_board() received: " << fen << "\n";
+    bool debug = false;
+
+    if (debug) std::cout << "FEN_to_board() received: " << fen << "\n";
 
     // create the number sequence for each square
     std::vector<int> board_ind(64);
@@ -3744,22 +3933,61 @@ Board FEN_to_board(std::string fen)
 
     // create an empty board
     Board board = create_board(false);
+    bool white_to_play = true;
 
-    // now loop through the FEN string
+    bool got_colour = false;
+    bool got_castling = false;
+    bool got_en_passant = false;
+    bool got_fifty_move = false;
+
+    // split the fen string into blocks based on spaces
+    std::vector<std::string> fen_blocks;
+    int word_end = 0;
+    int word_start = 0;
+    for (int i = 0; i < fen.size(); i++) {
+      if (fen[i] == ' ') {
+        word_end = i;
+        fen_blocks.push_back(fen.substr(word_start, word_end - word_start));
+        word_start = i + 1;
+      }
+      else if (i == fen.size() - 1) {
+        fen_blocks.push_back(fen.substr(word_start, word_end - word_start));
+      }
+    }
+
+    // for debugging: print the blocks
+    if (debug) {
+        std::cout << "FEN string blocks (n = " << fen_blocks.size() << ")\n";
+        for (int i = 0; i < fen_blocks.size(); i++) {
+            std::cout << fen_blocks[i] << "\n";
+        }
+    }
+
+    if (fen_blocks.size() == 0) {
+        throw std::runtime_error("FEN_to_board() error: fen_blocks.size() == 0");
+    }
+
+    // now loop through the FEN board string
     ind = 0;
-    for (char c : fen) {
-        if (c == 'p') board.arr[board_ind[ind]] = -1;
-        else if (c == 'n') board.arr[board_ind[ind]] = -2;
-        else if (c == 'b') board.arr[board_ind[ind]] = -3;
-        else if (c == 'r') board.arr[board_ind[ind]] = -4;
-        else if (c == 'q') board.arr[board_ind[ind]] = -5;
-        else if (c == 'k') board.arr[board_ind[ind]] = -6;
-        else if (c == 'P') board.arr[board_ind[ind]] = 1;
-        else if (c == 'N') board.arr[board_ind[ind]] = 2;
-        else if (c == 'B') board.arr[board_ind[ind]] = 3;
-        else if (c == 'R') board.arr[board_ind[ind]] = 4;
-        else if (c == 'Q') board.arr[board_ind[ind]] = 5;
-        else if (c == 'K') board.arr[board_ind[ind]] = 6;
+    for (char c : fen_blocks[0]) {
+
+        if (ind >= 64) {
+            std::cout << "FEN_to_board() warning: ind exceeded 64, this is not expected\n";
+            break;
+        }
+
+        if (c == 'p') board.arr[board_ind[ind]] = BoardSq::bP;
+        else if (c == 'n') board.arr[board_ind[ind]] = BoardSq::bN;
+        else if (c == 'b') board.arr[board_ind[ind]] = BoardSq::bB;
+        else if (c == 'r') board.arr[board_ind[ind]] = BoardSq::bR;
+        else if (c == 'q') board.arr[board_ind[ind]] = BoardSq::bQ;
+        else if (c == 'k') board.arr[board_ind[ind]] = BoardSq::bK;
+        else if (c == 'P') board.arr[board_ind[ind]] = BoardSq::wP;
+        else if (c == 'N') board.arr[board_ind[ind]] = BoardSq::wN;
+        else if (c == 'B') board.arr[board_ind[ind]] = BoardSq::wB;
+        else if (c == 'R') board.arr[board_ind[ind]] = BoardSq::wR;
+        else if (c == 'Q') board.arr[board_ind[ind]] = BoardSq::wQ;
+        else if (c == 'K') board.arr[board_ind[ind]] = BoardSq::wK;
         else if (c == '1') ind += 0;
         else if (c == '2') ind += 1;
         else if (c == '3') ind += 2;
@@ -3769,198 +3997,362 @@ Board FEN_to_board(std::string fen)
         else if (c == '7') ind += 6;
         else if (c == '8') ind += 7;
         else if (c == '/') ind -= 1;
-        // else if (c == '2') {
 
-        // }
-        // else if (c == 'n') {
-
-        // }
         ind += 1;
-
-        if (ind >= 64) {
-            break;
-        }
     }
 
-    // en passant, castle rights, next to play
-    // num moves total, num moves since last capture
-    // all these are still yet to be added
+    // next extract who is next to play
+    if (fen_blocks.size() >= 2) {
+        for (char c : fen_blocks[1]) {
+            if (c == 'w') {
+                set_white_plays_next(board);
+                break;
+            }
+            if (c == 'b') {
+                set_black_plays_next(board);
+                break;
+            }
+        }
+        
+        if (not does_white_play_next(board) and
+            not does_black_play_next(board)) {
+            std::cout << "FEN_to_board() error: next colour to play failed to be detected\n";
+        }
+
+        if (debug) std::cout << "Next colour to play is: " << fen_blocks[1] << "\n";
+    }
+
+    // extract castle rights
+    if (fen_blocks.size() >= 3) {
+        for (char c : fen_blocks[2]) {
+            if (c == 'K') board.arr[BoardInd::castleWK] = BoardSq::yes;          // white kingside
+            else if (c == 'Q') board.arr[BoardInd::castleWQ] = BoardSq::yes;     // white queenside
+            else if (c == 'k') board.arr[BoardInd::castleBK] = BoardSq::yes;     // black kingside
+            else if (c == 'q') board.arr[BoardInd::castleBQ] = BoardSq::yes;     // black queenside
+        }
+
+        if (debug) std::cout << "Castle rights are: " << fen_blocks[2] << "\n";
+    }
+
+    // extract en passant square
+    if (fen_blocks.size() >= 4) {
+
+        if (fen_blocks[3] == "a3") board.arr[BoardInd::passantStart + 0] = BoardSq::yes;
+        else if (fen_blocks[3] == "b3") board.arr[BoardInd::passantStart + 1] = BoardSq::yes;
+        else if (fen_blocks[3] == "c3") board.arr[BoardInd::passantStart + 2] = BoardSq::yes;
+        else if (fen_blocks[3] == "d3") board.arr[BoardInd::passantStart + 3] = BoardSq::yes;
+        else if (fen_blocks[3] == "e3") board.arr[BoardInd::passantStart + 4] = BoardSq::yes;
+        else if (fen_blocks[3] == "f3") board.arr[BoardInd::passantStart + 5] = BoardSq::yes;
+        else if (fen_blocks[3] == "g3") board.arr[BoardInd::passantStart + 6] = BoardSq::yes;
+        else if (fen_blocks[3] == "h3") board.arr[BoardInd::passantStart + 7] = BoardSq::yes;
+        else if (fen_blocks[3] == "a6") board.arr[BoardInd::passantStart + 8] = BoardSq::yes;
+        else if (fen_blocks[3] == "b6") board.arr[BoardInd::passantStart + 9] = BoardSq::yes;
+        else if (fen_blocks[3] == "c6") board.arr[BoardInd::passantStart + 10] = BoardSq::yes;
+        else if (fen_blocks[3] == "d6") board.arr[BoardInd::passantStart + 11] = BoardSq::yes;
+        else if (fen_blocks[3] == "e6") board.arr[BoardInd::passantStart + 12] = BoardSq::yes;
+        else if (fen_blocks[3] == "f6") board.arr[BoardInd::passantStart + 13] = BoardSq::yes;
+        else if (fen_blocks[3] == "g6") board.arr[BoardInd::passantStart + 14] = BoardSq::yes;
+        else if (fen_blocks[3] == "h6") board.arr[BoardInd::passantStart + 15] = BoardSq::yes;
+
+        if (debug) std::cout << "En passant square is: " << fen_blocks[3] << "\n";
+    }
+
+    // num halfmoves since last capture, not added
+    // total number of fullmoves in the game, not added
+
+    if (debug) std::cout << "Finished FEN function\n";
 
     return board;
 }
 
-//int main()
-//{
-//    // create a board
-//    //int board[120];
-//
-//    int board[120];
-//
-//    create_board_a(board);
-//
-//    //// lets test the castling behaviour
-//    //board[22] = 0;
-//    //board[23] = 0;
-//    //board[52] = -5;
-//    //board[42] = -3;
-//    //board[32] = 0;
-//    //board[5] = 7;
-//    //std::vector<int> ls_castles = list_of_castles(board, 1);
-//
-//    //// print the output
-//    //std::cout << "The legal castles are: ";
-//    //for (int x : ls_castles) {
-//    //    std::cout << " " << x;
-//    //}
-//    //std::cout << '\n';
-//
-//    move_piece_on_board_a(board, 33, 53);
-//
-//    // print the board
-//    print_board_a(board,false);
-//
-//    /*move_piece_on_board(board, 85, 65);
-//    print_board(board, false);
-//
-//    move_piece_on_board(board, 34, 44);
-//    print_board(board, false);
-//
-//    move_piece_on_board(board, 86, 66);
-//    print_board(board, false);
-//    move_piece_on_board(board, 44, 54);
-//    print_board(board, false);*/
-//
-//    /*int z = 0;
-//    for (int i = 0; i < 120; i++) {
-//        if (z % 10 == 0) {
-//            std::cout << '\n';
-//        }
-//        std::cout << " " << *(board_ptr + i);
-//        z++;
-//    }*/
-//    
-//    /*for (int y : board) {
-//        if (z % 10 == 0) {
-//            std::cout << '\n';
-//        }
-//        std::cout << " " << y;
-//        ++z;
-//    }*/
-//
-//    
-//
-//}
+void print_FEN_board(std::string fen)
+{
+    /* print a board from an FEN string */
 
-// lets test out some pybind stuff
+    Board board = FEN_to_board(fen);
 
-// namespace py = pybind11;
+    #if defined(LUKE_PYBIND)
+        py_print_board(board);
+    #else
+        print_board(board);
+    #endif
+}
 
-// PYBIND11_MODULE(board_functions, m) {
+void print_board_vectors(BoardVectors board_vec)
+{
+    /* print out the board represented by a board vector */
 
-//     // data structures
-//     py::class_<Board>(m, "Board")
-//         .def(py::init<>())
-//         .def("look", &Board::look)
-//         .def("set", &Board::set);
+    Board board = vectors_to_board(board_vec);
 
-//     py::class_<piece_attack_defend_struct>(m, "piece_attack_defend_struct")
-//         .def(py::init<>())
-//         .def("get_attack_list", &piece_attack_defend_struct::get_attack_list)
-//         .def("get_attack_me", &piece_attack_defend_struct::get_attack_me)
-//         .def("get_defend_me", &piece_attack_defend_struct::get_defend_me)
-//         .def("get_piece_view", &piece_attack_defend_struct::get_piece_view)
-//         .def("get_evalution", &piece_attack_defend_struct::get_evaluation);
+    #if defined(LUKE_PYBIND)
+        py_print_board(board);
+    #else
+        print_board(board);
+    #endif
+}
 
-//     py::class_<total_legal_moves_struct>(m, "total_legal_moves_struct")
-//         .def(py::init<>())
-//         .def("get_square", &total_legal_moves_struct::get_square)
-//         .def("get_from_index", &total_legal_moves_struct::get_from_index)
-//         .def("set_from_index", &total_legal_moves_struct::set_from_index)
-//         .def("get_legal_moves", &total_legal_moves_struct::get_legal_moves)
-//         .def("get_outcome", &total_legal_moves_struct::get_outcome)
-//         .def("get_evaluation", &total_legal_moves_struct::get_evaluation)
-//         .def("get_phase", &total_legal_moves_struct::get_phase)
-//         .def("get_phase_adjust", &total_legal_moves_struct::get_phase_adjust)
-//         .def("get_old_value", &total_legal_moves_struct::get_old_value)
-//         .def("get_piece_view", &total_legal_moves_struct::get_piece_view)
-//         ;
+BoardVectors FEN_and_move_to_board_vectors(std::string fen, std::string move_str)
+{
+    /* take an FEN string, play a given move on the board, and then convert the
+    resultant board into a board vector */
+    
+    Board board = FEN_to_board(fen);
+    bool white_to_play = does_white_play_next(board);
+    verified_move move = verify_move(board, white_to_play, move_str);
 
-//     py::class_<phase_struct>(m, "phase_struct")
-//         .def(py::init<>())
-//         .def("get_eval_adjust", &phase_struct::get_eval_adjust)
-//         .def("get_phase", &phase_struct::get_phase)
-//         ;
+    if (move.move_mod == -1) {
+        print_board(board);
+        std::cout << "Illegal move was: " << move_str << "\n";
+        throw std::runtime_error("FEN_and_move_to_board_vectors() error: move illegal on board");
+    }
 
-//     py::class_<move_struct>(m, "move_struct")
-//         .def(py::init<>())
-//         .def("get_evaluation", &move_struct::get_evaluation)
-//         .def("get_hash", &move_struct::get_hash)
-//         .def("get_start_sq", &move_struct::get_start_sq)
-//         .def("get_dest_sq", &move_struct::get_dest_sq)
-//         .def("get_move_mod", &move_struct::get_move_mod)
-//         .def("get_board", &move_struct::get_board);
+    // make the move on the board
+    make_move(board, move.start_sq, move.dest_sq, move.move_mod);
 
-//     py::class_<generated_moves_struct>(m, "generated_moves_struct")
-//         .def(py::init<>())
-//         .def("get_evaluation", &generated_moves_struct::get_evaluation)
-//         .def("get_outcome", &generated_moves_struct::get_outcome)
-//         .def("get_board", &generated_moves_struct::get_board)
-//         .def("get_moves", &generated_moves_struct::get_moves)
-//         .def("does_game_continue", &generated_moves_struct::does_game_continue)
-//         .def("get_length", &generated_moves_struct::get_length)
-//         .def("is_mating_move", &generated_moves_struct::is_mating_move);
+    // alternate who plays next (which is NOT handled by make_move(...))
+    if (white_to_play) {
+        set_black_plays_next(board);
+    }
+    else {
+        set_white_plays_next(board);
+    }
 
-//     // functions that use the board struct
-//     m.def("create_board", py::overload_cast<>(&create_board));
-//     m.def("create_board", py::overload_cast<std::vector<std::string>>(&create_board));
-//     m.def("print_board", py::overload_cast<Board&>(&print_board));
-//     m.def("print_board", py::overload_cast<Board&, bool>(&print_board));
-//     m.def("py_print_board", py::overload_cast<Board&>(&py_print_board));
-//     m.def("py_print_board", py::overload_cast<Board&, bool>(&py_print_board));
-//     m.def("move_piece_on_board", &move_piece_on_board);
-//     m.def("is_in_check", &is_in_check);
-//     m.def("list_of_castles", &list_of_castles);
-//     m.def("make_move", &make_move);
-//     m.def("piece_attack_defend", &piece_attack_defend);
-//     m.def("total_legal_moves", &total_legal_moves);
-//     m.def("find_pins_checks", &find_pins_checks);
-//     m.def("king_walks", &king_walks);
-//     m.def("is_in", &is_in);
-//     m.def("get_my_pin_moves", &get_my_pin_moves);
-//     m.def("is_checkmate", &is_checkmate);
-//     m.def("test_checkmate", &test_checkmate);
-//     m.def("tempo_check", &tempo_check);
-//     m.def("linear_insert", &linear_insert);
-//     m.def("order_attackers_defenders", &order_attackers_defenders);
-//     m.def("determine_phase", &determine_phase);
-//     m.def("piece_value", &piece_value);
-//     m.def("eval_piece", &eval_piece);
-//     m.def("eval_board", &eval_board);
-//     m.def("ordered_insert_moves", &ordered_insert_moves);
-//     m.def("generate_moves", &generate_moves);
-//     m.def("set_evaluation_settings", &set_evaluation_settings);
-//     m.def("are_boards_identical", &are_boards_identical);
-//     m.def("copy_board", &copy_board);
-//     m.def("find_view", &find_view);
-//     m.def("get_game_outcome", &get_game_outcome);
-//     m.def("square_letters_to_numbers", &square_letters_to_numbers);
-//     m.def("square_numbers_to_letters", &square_numbers_to_letters);
-//     m.def("is_promotion", &is_promotion);
+    // convert the new board into a board vector
+    return board_to_vectors(board);
+}
 
-// #ifdef VERSION_INFO
-//     m.attr("__version__") = VERSION_INFO;
-// #else
-//     m.attr("__version__") = "dev";
-// #endif
-// }
+BoardVectors FEN_to_board_vectors(std::string fen)
+{
+    Board board = FEN_to_board(fen);
+    return board_to_vectors(board);
+}
 
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
+BoardVectors FEN_to_board_vectors_with_eval(std::string fen)
+{
+    /* include an evaluation of the board square-wise as the FEN is converted */
 
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
+    Board board = FEN_to_board(fen);
+    bool white_to_play = does_white_play_next(board);
+
+    // convert the new board into a board vector
+    BoardVectors board_vec = board_to_vectors(board);
+
+    // add in the evaluation
+    board_vec.sq_evals = eval_squares(board, white_to_play);
+    board_vec.squares_evaluated = true;
+
+    return board_vec;
+}
+
+BoardVectors board_to_vectors(Board& board)
+{
+    /* convert an FEN string into a numpy style board */
+
+    BoardVectors board_vec;
+
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+
+            int ind = (i * 10 + 20) + (j + 1);
+            int here = board.arr[ind];
+
+            int vecind = (i * 8) + j;
+
+            switch (here) {
+            case BoardSq::wP: {
+                board_vec.wP[vecind] = 1;
+                break;
+            }
+            case BoardSq::wN: {
+                board_vec.wN[vecind] = 1;
+                break;
+            }
+            case BoardSq::wB: {
+                board_vec.wB[vecind] = 1;
+                break;
+            }
+            case BoardSq::wR: {
+                board_vec.wR[vecind] = 1;
+                break;
+            }
+            case BoardSq::wQ: {
+                board_vec.wQ[vecind] = 1;
+                break;
+            }
+            case BoardSq::wK: {
+                board_vec.wK[vecind] = 1;
+                break;
+            }
+            case BoardSq::bP: {
+                board_vec.bP[vecind] = 1;
+                break;
+            }
+            case BoardSq::bN: {
+                board_vec.bN[vecind] = 1;
+                break;
+            }
+            case BoardSq::bB: {
+                board_vec.bB[vecind] = 1;
+                break;
+            }
+            case BoardSq::bR: {
+                board_vec.bR[vecind] = 1;
+                break;
+            }
+            case BoardSq::bQ: {
+                board_vec.bQ[vecind] = 1;
+                break;
+            }
+            case BoardSq::bK: {
+                board_vec.bK[vecind] = 1;
+                break;
+            }
+            }
+        }
+    }
+
+    // fill in castle rights as static vectors
+    if (board.arr[BoardInd::castleWK] == BoardSq::yes) {
+        for (int i = 0; i < board_vec.wKS.size(); i++) {
+            board_vec.wKS[i] = 1;
+        }
+    }
+    if (board.arr[BoardInd::castleWQ] == BoardSq::yes) {
+        for (int i = 0; i < board_vec.wQS.size(); i++) {
+            board_vec.wQS[i] = 1;
+        }
+    }
+    if (board.arr[BoardInd::castleBK] == BoardSq::yes) {
+        for (int i = 0; i < board_vec.bKS.size(); i++) {
+            board_vec.bKS[i] = 1;
+        }
+    }
+    if (board.arr[BoardInd::castleBQ] == BoardSq::yes) {
+        for (int i = 0; i < board_vec.bQS.size(); i++) {
+            board_vec.bQS[i] = 1;
+        }
+    }
+
+    // fill in player colour
+    if (board.arr[BoardInd::whitePlaysNext] == BoardSq::yes) {
+        for (int i = 0; i < board_vec.colour.size(); i++) {
+            board_vec.colour[i] = 1;
+        }
+    }
+
+    // no logic for total moves, or no take ply currently
+
+    return board_vec;
+}
+
+Board vectors_to_board(BoardVectors board_vec)
+{
+    /* convert an FEN string into a numpy style board */
+
+    // create a board without the pieces
+    Board board = create_board(false);
+
+    // loop over the squares of the actual board and place any pieces
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+
+            // index in the board array
+            int ind = (i * 10 + 20) + (j + 1);
+            int here = board.arr[ind];
+
+            // index in the board vectors
+            int vecind = (i * 8) + j;
+
+            // check every board vector to see if a piece is there
+            if (board_vec.wP[vecind]) {
+                board.arr[ind] = BoardSq::wP;
+            }
+            else if (board_vec.wN[vecind]) {
+                board.arr[ind] = BoardSq::wN;
+            }
+            else if (board_vec.wB[vecind]) {
+                board.arr[ind] = BoardSq::wB;
+            }
+            else if (board_vec.wR[vecind]) {
+                board.arr[ind] = BoardSq::wR;
+            }
+            else if (board_vec.wQ[vecind]) {
+                board.arr[ind] = BoardSq::wQ;
+            }
+            else if (board_vec.wK[vecind]) {
+                board.arr[ind] = BoardSq::wK;
+            }
+            else if (board_vec.bP[vecind]) {
+                board.arr[ind] = BoardSq::bP;
+            }
+            else if (board_vec.bN[vecind]) {
+                board.arr[ind] = BoardSq::bN;
+            }
+            else if (board_vec.bB[vecind]) {
+                board.arr[ind] = BoardSq::bB;
+            }
+            else if (board_vec.bR[vecind]) {
+                board.arr[ind] = BoardSq::bR;
+            }
+            else if (board_vec.bQ[vecind]) {
+                board.arr[ind] = BoardSq::bQ;
+            }
+            else if (board_vec.bK[vecind]) {
+                board.arr[ind] = BoardSq::bK;
+            }
+        }
+    }
+
+    // now assign castle rights
+    if (board_vec.wKS[0]) board.arr[BoardInd::castleWK] = BoardSq::yes;
+    if (board_vec.wQS[0]) board.arr[BoardInd::castleWQ] = BoardSq::yes;
+    if (board_vec.bKS[0]) board.arr[BoardInd::castleBK] = BoardSq::yes;
+    if (board_vec.bQS[0]) board.arr[BoardInd::castleBQ] = BoardSq::yes;
+
+    // assign player colour
+    if (board_vec.colour[0]) {
+        set_white_plays_next(board);
+    }
+    else {
+        set_black_plays_next(board);
+    }
+
+    // no logic for total moves, or no take ply currently
+
+    return board;
+}
+
+BoardVectors FEN_move_eval_to_board_vectors(std::string fen, std::string move_str)
+{
+    /* create board vectors from a move and an FEN string, also evalaute each square */
+
+    Board board = FEN_to_board(fen);
+    bool white_to_play = does_white_play_next(board);
+    verified_move move = verify_move(board, white_to_play, move_str);
+
+    if (move.move_mod == -1) {
+        print_board(board);
+        std::cout << "Illegal move was: " << move_str << "\n";
+        throw std::runtime_error("FEN_and_move_to_board_vectors() error: move illegal on board");
+    }
+
+    // make the move on the board
+    make_move(board, move.start_sq, move.dest_sq, move.move_mod);
+
+    // alternate who plays next (which is NOT handled by make_move(...))
+    if (white_to_play) {
+        set_black_plays_next(board);
+    }
+    else {
+        set_white_plays_next(board);
+    }
+
+    // convert the new board into a board vector
+    BoardVectors board_vec = board_to_vectors(board);
+
+    // add in the evaluation
+    board_vec.sq_evals = eval_squares(board, white_to_play);
+    board_vec.squares_evaluated = true;
+
+    return board_vec;
+}

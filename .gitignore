@@ -5,3 +5,10 @@ build
 .vscode
 *.pyc
 data/
+stockfish/
+gamedata/
+gmon.out
+profile.txt
+models/
+datasets/
+*.xlsx

@@ -12,7 +12,8 @@ PYBIND11_MODULE(board_module, m) {
     py::class_<Board>(m, "Board")
         .def(py::init<>())
         .def("look", &Board::look)
-        .def("set", &Board::set);
+        .def("set", &Board::set)
+        ;
 
     py::class_<piece_attack_defend_struct>(m, "piece_attack_defend_struct")
         .def(py::init<>())
@@ -20,7 +21,8 @@ PYBIND11_MODULE(board_module, m) {
         .def("get_attack_me", &piece_attack_defend_struct::get_attack_me)
         .def("get_defend_me", &piece_attack_defend_struct::get_defend_me)
         .def("get_piece_view", &piece_attack_defend_struct::get_piece_view)
-        .def("get_evalution", &piece_attack_defend_struct::get_evaluation);
+        .def("get_evalution", &piece_attack_defend_struct::get_evaluation)
+        ;
 
     py::class_<total_legal_moves_struct>(m, "total_legal_moves_struct")
         .def(py::init<>())
@@ -49,7 +51,9 @@ PYBIND11_MODULE(board_module, m) {
         .def("get_start_sq", &move_struct::get_start_sq)
         .def("get_dest_sq", &move_struct::get_dest_sq)
         .def("get_move_mod", &move_struct::get_move_mod)
-        .def("get_board", &move_struct::get_board);
+        .def("get_board", &move_struct::get_board)
+        .def("to_letters", &move_struct::to_letters)
+        ;
 
     py::class_<generated_moves_struct>(m, "generated_moves_struct")
         .def(py::init<>())
@@ -59,7 +63,43 @@ PYBIND11_MODULE(board_module, m) {
         .def("get_moves", &generated_moves_struct::get_moves)
         .def("does_game_continue", &generated_moves_struct::does_game_continue)
         .def("get_length", &generated_moves_struct::get_length)
-        .def("is_mating_move", &generated_moves_struct::is_mating_move);
+        .def("is_mating_move", &generated_moves_struct::is_mating_move)
+        ;
+
+    py::class_<BoardVectors>(m, "BoardVectors")
+        .def(py::init<>())
+        .def_readwrite("wP", &BoardVectors::wP)
+        .def_readwrite("wN", &BoardVectors::wN)
+        .def_readwrite("wB", &BoardVectors::wB)
+        .def_readwrite("wR", &BoardVectors::wR)
+        .def_readwrite("wQ", &BoardVectors::wQ)
+        .def_readwrite("wK", &BoardVectors::wK)
+        .def_readwrite("bP", &BoardVectors::bP)
+        .def_readwrite("bN", &BoardVectors::bN)
+        .def_readwrite("bB", &BoardVectors::bB)
+        .def_readwrite("bR", &BoardVectors::bR)
+        .def_readwrite("bQ", &BoardVectors::bQ)
+        .def_readwrite("bK", &BoardVectors::bK)
+        .def_readwrite("wKS", &BoardVectors::wKS)
+        .def_readwrite("wQS", &BoardVectors::wQS)
+        .def_readwrite("bKS", &BoardVectors::bKS)
+        .def_readwrite("bQS", &BoardVectors::bQS)
+        .def_readwrite("colour", &BoardVectors::colour)
+        .def_readwrite("total_moves", &BoardVectors::total_moves)
+        .def_readwrite("no_take_ply", &BoardVectors::no_take_ply)
+        .def_readwrite("sq_evals", &BoardVectors::sq_evals)
+        .def_readwrite("squares_evaluated", &BoardVectors::squares_evaluated)
+        ;
+
+    // expose only functions we want to be usable from python
+    m.def("generate_moves_FEN", &generate_moves_FEN);
+    m.def("print_FEN_board", &print_FEN_board);
+    m.def("print_board_vectors", &print_board_vectors);
+    m.def("FEN_to_board_vectors", &FEN_to_board_vectors);
+    m.def("is_white_next_FEN", &is_white_next_FEN);
+    m.def("FEN_to_board_vectors_with_eval", &FEN_to_board_vectors_with_eval);
+    m.def("FEN_and_move_to_board_vectors", &FEN_and_move_to_board_vectors);
+    m.def("FEN_move_eval_to_board_vectors", &FEN_move_eval_to_board_vectors);
 
     // functions that use the board struct
     // m.def("create_board", py::overload_cast<>(&create_board));

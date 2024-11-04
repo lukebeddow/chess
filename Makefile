@@ -16,7 +16,7 @@
 
 # define the targets (must compile from a .cpp file with same name in SOURCEDIR)
 TARGET_LIST_CPP := play_terminal dr_memory_build test_terminal
-TARGET_LIST_PY := board_module tree_module
+TARGET_LIST_PY := board_module tree_module stockfish_module
 
 # define directory structure
 SOURCEDIR := src
@@ -34,11 +34,14 @@ else
 DEBUG = -O2
 endif
 
-# define python location (if no source in venv, use: ln -s /usr/include/python3.8/ /home/path/to/env/name/include/python3.8)
-PYTHON = /home/luke/pyenv/py38_general
-PYTHON_EXE = $(PYTHON)/bin/python
-PYTHON_INCLUDE = $(PYTHON)/include/python3.8
-PYBIND_PATH = /home/luke/repo/pybind11
+ifeq ($(filter profile, $(MAKECMDGOALS)), profile)
+DEBUG = -O0 -pg
+else
+DEBUG = -O2
+endif
+
+# define library locations - this file contains user specified options
+include buildsettings.mk
 
 # define compiler flags and libraries
 COMMON = $(DEBUG) -std=c++14 -mavx -pthread -I$(PYTHON_INCLUDE) \
@@ -88,6 +91,9 @@ test:
 
 .PHONY: debug
 debug: cpp
+
+.PHONY: profile
+profile: cpp
 
 # build object files
 $(CPPSHAREDOBJ): $(BUILDCPP)/%.o : $(SOURCEDIR)/%.cpp
