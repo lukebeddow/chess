@@ -53,9 +53,9 @@ do
     -t | --timestamp ) (( i++ )); timestamp=${!i}; echo Timestamp set to $timestamp ;;
     -s | --stagger ) (( i++ )); STAGGER=${!i}; echo stagger is $STAGGER ;;
     -n | --num-rand ) (( i++ )); NUM_RAND=${!i}; echo num_rand is $NUM_RAND ;;
-    -g | --generate-data ) (( i++ )); GEN_DATA='Y'; echo generate data job selected ;;
     # without arguments
     -d | --debug ) LOGGING='N'; echo Debug mode on, terminal logging on ;;
+    -g | --generate-data ) GEN_DATA='Y'; echo generate data job selected ;;
     # everything else passed directly to python
     * ) PY_ARGS+=( ${!i} ) ;;
   esac
