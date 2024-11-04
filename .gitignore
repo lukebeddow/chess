@@ -10,5 +10,6 @@ gamedata/
 gmon.out
 profile.txt
 models/
+logs/
 datasets/
 *.xlsx
