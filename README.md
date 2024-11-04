@@ -1,6 +1,5 @@
 # Chess Engine
 
-
 <img src="https://github.com/lukebeddow/gifs-and-resources/blob/main/chess.gif" width="20%" height="20%"/>
 
 This repository implements a traditional chess engine which I have written in C++, as well as a deep learning framework to train a neural network evaluator function. The engine was a passion project, and so I decided I did not want to look up any advice or use established methods/algorithms beforehand. The final version of the engine is strong enough to beat me, which was my original aim for the project.
