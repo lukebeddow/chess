@@ -22,7 +22,7 @@ import torch.nn as nn
 
 class EvalDataset(torch.utils.data.Dataset):
 
-  def __init__(self, datapath, sample_names, indexes=None, log_level=1):
+  def __init__(self, datapath, sample_names, auto_load=True, indexes=None, log_level=1):
     """
     Dataset containint stockfish evaluations of chess positions. Pass in the
     path to the samples, their names, and the indexes to load
@@ -33,16 +33,24 @@ class EvalDataset(torch.utils.data.Dataset):
     self.modelsaver = ModelSaver(datapath, log_level=log_level)
     self.log_level = log_level
     self.positions = []
-    self.mate_value = 50000 # 50 pawns
-    self.convert_evals_to_pawns = True
-    self.use_all_moves = True
-    self.use_eval_normalisation = False
-    self.norm_method = "standard"
-    self.norm_factor = None
-    self.board_dtype = torch.float
+    self.seen_values = None
+    self.num_lines = None
 
+    self.mate_value = 50                # value of a checkmate (units: 1.0 per pawn)
+    self.convert_evals_to_pawns = True  # convert evaluations from 1000 per pawn, to 1.0 per pawn
+    self.use_all_moves = True           # add in all child moves from a positions, instead of the parent
+    self.save_sq_eval = True            # evaluate every square in the board using my handcrafted evaluator
+    self.use_eval_normalisation = False # apply normalisation to all evaluations
+    self.norm_method = "standard"       # normalisation method to use, standard is mean/std scale -1/+1 bound
+    self.norm_factor = None             # normalisation factors saved for future use
+    self.board_dtype = torch.float      # datatype to use for torch tensors
+    self.stockfish_converstion = 1e-2   # stockfish evals are in 1/100th of a pawn, so 200 = 2 pawns
+    self.my_conversion = 1e-3           # my evals are in 1/1000th of a pawn, so 2000 = 2 pawns
+
+    # create empty containers for future data
     self.boards = []
     self.evals = []
+    self.square_evals = []
 
     # automatically get all indexes if not specified
     if indexes is None:
@@ -67,7 +75,7 @@ class EvalDataset(torch.utils.data.Dataset):
     
     return self.positions[idx]
   
-  def FEN_to_torch(self, fen_string, move=None):
+  def FEN_to_torch(self, fen_string, move=None, eval_sqs=False):
     """
     Convert an FEN string into a torch tensor board representation
     """
@@ -75,7 +83,10 @@ class EvalDataset(torch.utils.data.Dataset):
     if move is None:
       boardvec = bf.FEN_to_board_vectors(fen_string)
     else:
-      boardvec = bf.FEN_and_move_to_board_vectors(fen_string, move)
+      if eval_sqs:
+        boardvec = bf.FEN_move_eval_to_board_vectors(fen_string, move)
+      else:
+        boardvec = bf.FEN_and_move_to_board_vectors(fen_string, move)
 
     tensortype = self.board_dtype
 
@@ -96,8 +107,10 @@ class EvalDataset(torch.utils.data.Dataset):
     t_bKS = torch.tensor(boardvec.bKS, dtype=tensortype).reshape(8, 8)
     t_bQS = torch.tensor(boardvec.bQS, dtype=tensortype).reshape(8, 8)
     t_colour = torch.tensor(boardvec.colour, dtype=tensortype).reshape(8, 8)
-    t_total_moves = torch.tensor(boardvec.total_moves, dtype=tensortype).reshape(8, 8)
-    t_no_take_ply = torch.tensor(boardvec.no_take_ply, dtype=tensortype).reshape(8, 8)
+
+    # ignore these as no data in them currently, just wasted space
+    # t_total_moves = torch.tensor(boardvec.total_moves, dtype=tensortype).reshape(8, 8)
+    # t_no_take_ply = torch.tensor(boardvec.no_take_ply, dtype=tensortype).reshape(8, 8)
 
     board_tensor = torch.stack((
       t_wP,
@@ -117,11 +130,17 @@ class EvalDataset(torch.utils.data.Dataset):
       t_bKS,
       t_bQS,
       t_colour,
-      t_total_moves,
-      t_no_take_ply,
+      # t_total_moves,
+      # t_no_take_ply,
     ), dim=0)
 
-    return board_tensor
+    if eval_sqs:
+      sq_evals = torch.tensor(boardvec.sq_evals, dtype=float)
+      if self.convert_evals_to_pawns:
+        sq_evals *= self.my_conversion
+      return board_tensor, sq_evals
+    else:
+      return board_tensor
   
   def print_board_tensor(self, board_tensor):
     """
@@ -146,8 +165,8 @@ class EvalDataset(torch.utils.data.Dataset):
     print("Black castles KS", board_tensor[14])
     print("Black castles QS", board_tensor[15])
     print("colour", board_tensor[16])
-    print("total moves", board_tensor[17])
-    print("no take ply", board_tensor[18])
+    # print("total moves", board_tensor[17])
+    # print("no take ply", board_tensor[18])
 
     return
 
@@ -194,10 +213,36 @@ class EvalDataset(torch.utils.data.Dataset):
       else:
         raise RuntimeError("EvalDataset.denormalise_evaluations() error: all=False and value=None, incorrect function inputs")
 
-  def to_torch(self):
+  def count_all_positions(self):
+    """
+    Count the total number of possible positions
+    """
+
+    num_pos = len(self.positions)
+
+    if not self.use_all_moves: return num_pos
+
+    num_lines = 0
+
+    # loop through all positions and all child moves
+    for i in range(num_pos):
+      for j in range(len(self.positions[i].move_vector)):
+
+        if self.positions[i].move_vector[j].move_letters == "pv":
+          continue
+
+        num_lines += 1
+
+    self.num_lines = num_lines
+
+    return num_lines
+
+  def to_torch(self, indexes_only=None):
     """
     Convert dataset into torch tensors
     """
+
+    t1 = time.time()
 
     if len(self.positions) == 0:
       print("EvalDataset.to_torch() warning: len(self.positions) == 0, nothing done")
@@ -207,56 +252,98 @@ class EvalDataset(torch.utils.data.Dataset):
     example = self.FEN_to_torch(self.positions[0].fen_string)
     num_pos = len(self.positions)
 
+    break_out = False
+
+    if indexes_only is not None:
+      indexes_only = sorted(indexes_only)
+      proxy_ind = 0
+      selected_indexes_ind = 0
+
     if self.use_all_moves:
       # count how many positions we will have
       num_lines = 0
       for i in range(num_pos):
         num_lines += len(self.positions[i].move_vector)
+      if indexes_only is not None:
+        if len(indexes_only) > num_lines:
+          raise RuntimeError(f"EvalDataset.to_torch() error: num_lines = {num_lines}, but number of selected indexes exceeds this = {len(indexes_only)}")
+        num_lines = len(indexes_only)
       self.boards = torch.zeros((num_lines, *example.shape), dtype=example.dtype)
       self.evals = torch.zeros(num_lines, dtype=torch.float)
+      if self.save_sq_eval:
+        self.square_evals = torch.zeros((num_lines, 64), dtype=torch.float)
       add_ind = 0
       error_moves = 0
       if self.log_level > 0:
-        print(f"self.use_all_moves = True, found {num_lines} lines (emerging from {num_pos} positions)")
+        if indexes_only is not None:
+          print(f"self.use_all_moves = True, selected {num_lines} lines using indexes_only (total {num_pos} positions)")
+        else:
+          print(f"self.use_all_moves = True, found {num_lines} lines (emerging from {num_pos} positions)")
     else:
       self.boards = torch.zeros((num_pos, *example.shape), dtype=example.dtype)
       self.evals = torch.zeros(num_pos, dtype=torch.float)
     
     for i in range(num_pos):
 
+      if break_out: break
+
       if self.use_all_moves:
         # loop through all moves and add those boards
         for j in range(len(self.positions[i].move_vector)):
+
+          if break_out: break
+
           if self.positions[i].move_vector[j].move_letters == "pv":
             error_moves += 1
-            num_lines -= 1
+            if indexes_only is None:
+              num_lines -= 1
             continue
-          self.boards[add_ind] = self.FEN_to_torch(self.positions[i].fen_string,
-                                                   self.positions[i].move_vector[j].move_letters)
+
+          if indexes_only is not None:
+            # is this index one we want to include
+            if indexes_only[selected_indexes_ind] == proxy_ind:
+              selected_indexes_ind += 1
+              # check if we have finished this batch
+              if selected_indexes_ind >= len(indexes_only):
+                break_out = True
+                break
+            else:
+              # skip the current index
+              proxy_ind += 1
+              continue
+
+          if self.save_sq_eval:
+            self.boards[add_ind], self.square_evals[add_ind] = self.FEN_to_torch(
+              self.positions[i].fen_string, self.positions[i].move_vector[j].move_letters, self.save_sq_eval
+            )
+          else:
+            self.boards[add_ind] = self.FEN_to_torch(self.positions[i].fen_string,
+                                                    self.positions[i].move_vector[j].move_letters)
           if self.positions[i].move_vector[j].eval == "mate":
             if not bf.is_white_next_FEN(self.positions[i].fen_string):
-              self.evals[add_ind] = -self.mate_value
+              self.evals[add_ind] = -self.mate_value / self.stockfish_converstion
             else:
-              self.evals[add_ind] = self.mate_value
+              self.evals[add_ind] = self.mate_value / self.stockfish_converstion
           else:
             self.evals[add_ind] = self.positions[i].move_vector[j].eval
           if self.convert_evals_to_pawns:
-            self.evals[add_ind] *= 1e-3
+            self.evals[add_ind] *= self.stockfish_converstion
+
           add_ind += 1
 
       else:
         self.boards[i] = self.FEN_to_torch(self.positions[i].fen_string)
         if self.positions[i].eval == "mate":
           if bf.is_white_next_FEN(self.positions[i].fen_string):
-            self.evals[i] = -self.mate_value
+            self.evals[i] = -self.mate_value / self.stockfish_converstion
           else:
-            self.evals[i] = self.mate_value
+            self.evals[i] = self.mate_value / self.stockfish_converstion
         else:
           self.evals[i] = self.positions[i].eval
         if self.convert_evals_to_pawns:
-          self.evals[i] *= 1e-3
+          self.evals[i] *= self.stockfish_converstion
 
-    if self.use_all_moves:
+    if self.use_all_moves and indexes_only is None:
       if error_moves > 0:
         self.boards = self.boards[:num_lines, :, :]
         self.evals = self.evals[:num_lines]
@@ -270,11 +357,21 @@ class EvalDataset(torch.utils.data.Dataset):
     # self.print_board_tensor(self.boards[x])
 
     if self.use_eval_normalisation:
+      if self.log_level > 0:
+        print("EvalDataset() is applying normalisation to self.evals")
       self.normalise_evaluations()
+
+    t2 = time.time()
+
+    if self.log_level > 0:
+      if self.use_all_moves:
+        total_num = num_lines
+      else: total_num = num_pos
+      print(f"EvalDataset(): {total_num} positions converted in {t2 - t1:.2f} seconds, average {((t2 - t1) / total_num) * 1e3:.3f} ms per position")
 
     return
   
-  def check_duplicates(self, remove=False):
+  def check_duplicates(self, remove=False, wipe_seen=True):
     """
     Check the number (and potentially remove) duplicates
     """
@@ -282,12 +379,16 @@ class EvalDataset(torch.utils.data.Dataset):
     t1 = time.time()
 
     # remove duplicates
-    seen_values = set()
+    if wipe_seen:
+      self.seen_values = set()
+    elif self.seen_values is None:
+      self.seen_values = set()
+      
     unique_positions = []
 
     for position in self.positions:
-      if position.fen_string not in seen_values:
-        seen_values.add(position.fen_string)
+      if position.fen_string not in self.seen_values:
+        self.seen_values.add(position.fen_string)
         unique_positions.append(position)
 
     num_duplicates = len(self.positions) - len(unique_positions)
@@ -482,120 +583,6 @@ class FCChessNet(nn.Module):
     for l in self.board_cnn:
       x = l(x)
     return x
-
-
-# ----- old, not currently used ----- #
-
-def calc_conv_layer_size(W, H, C, kernel_num, kernel_size, stride, padding, prnt=False):
-
-  new_W = floor(((W - kernel_size + 2*padding) / (stride)) + 1)
-  new_H = floor(((H - kernel_size + 2*padding) / (stride)) + 1)
-
-  if prnt:
-    print(f"Convolution transforms ({C}x{W}x{H}) to ({kernel_num}x{new_W}x{new_H})")
-
-  return new_W, new_H, kernel_num
-
-def calc_max_pool_size(W, H, C, pool_size, stride, prnt=False):
-
-  new_W = floor(((W - pool_size) / stride) + 1)
-  new_H = floor(((H - pool_size) / stride) + 1)
-
-  if prnt:
-    print(f"Max pool transforms ({C}x{W}x{H}) to ({C}x{new_W}x{new_H})")
-
-  return new_W, new_H, C
-
-def calc_adaptive_avg_size(W, H, C, output_size, prnt=False):
-
-  if prnt:
-    print(f"Adaptive pool transforms ({C}x{W}x{H}) to ({C}x{output_size[0]}x{output_size[1]})")
-
-  return output_size[0], output_size[1], C
-
-def calc_FC_layer_size(W, H, C, prnt=False):
-
-  new_W = 1
-  new_H = 1
-  new_C = W * H * C
-
-  if prnt:
-    print(f"The first FC layer should take size ({C}x{W}x{H}) as ({new_C}x{new_W}x{new_H})")
-
-  return new_W, new_H, new_C
-
-class BoardCNN(nn.Module):
-
-  name = "BoardCNN"
-
-  def __init__(self, board_size, outputs, device):
-
-    super(BoardCNN, self).__init__()
-    self.device = device
-
-    (channel, width, height) = board_size
-    self.name += f"_{channel}x{width}x{height}"
-
-    # # calculate the size of the first fully connected layer (ensure settings match image_features_ below)
-    # w, h, c = calc_conv_layer_size(width, height, channel, kernel_num=16, kernel_size=5, stride=2, padding=2, print=False)
-    # w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
-    # w, h, c = calc_conv_layer_size(w, h, c, kernel_num=64, kernel_size=5, stride=2, padding=2, print=False)
-    # w, h, c = calc_max_pool_size(w, h, c, pool_size=3, stride=2, print=False)
-    # w, h, c = calc_FC_layer_size(w, h, c, print=False)
-    # fc_layer_num = c
-
-    # # define the CNN to handle the images
-    # self.board_cnn = nn.Sequential(
-
-    #   # input CxWxH, output 2CxWxH
-    #   nn.Conv2d(channel, channel * 2, kernel_size=5, stride=2, padding=2),
-    #   nn.ReLU(),
-    #   nn.MaxPool2d(kernel_size=3, stride=2),
-    #   # nn.Dropout(),
-    #   nn.Conv2d(channel * 2, channel * 4, kernel_size=5, stride=2, padding=2),
-    #   nn.ReLU(),
-    #   nn.MaxPool2d(kernel_size=3, stride=2),
-    #   # nn.Dropout(),
-    #   nn.Flatten(),
-    #   nn.Linear(fc_layer_num, 128),
-    #   nn.ReLU(),
-    #   # nn.Linear(64*16, 64),
-    #   # nn.ReLU(),
-    # )
-
-    self.board_cnn = nn.Sequential(
-
-      # Layer 1
-      nn.Conv2d(in_channels=19, out_channels=32, kernel_size=3, padding=1),  # Conv layer
-      nn.ReLU(),                                                             # Activation
-      nn.MaxPool2d(kernel_size=2),                                           # Pooling (output size: 32 x 4 x 4)
-
-      # Layer 2
-      nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1),
-      nn.ReLU(),
-      nn.MaxPool2d(kernel_size=2),                                           # Pooling (output size: 64 x 2 x 2)
-
-      # Layer 3
-      nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1),
-      nn.ReLU(),
-      nn.MaxPool2d(kernel_size=2),                                           # Pooling (output size: 128 x 1 x 1)
-
-      # Flatten layer to transition to fully connected
-      nn.Flatten(),
-
-      # two fully connected layers to produce a single output
-      nn.Linear(128, 64),
-      nn.ReLU(),
-      nn.Linear(64, 1),
-  )
-
-  def forward(self, board):
-    board = board.to(self.device)
-    x = self.board_cnn(board)
-    return x
-
-  def to_device(self, device):
-    self.board_cnn.to(device)
     
 # ----- training functionality ----- #
   
@@ -682,56 +669,6 @@ def print_time_taken():
   print("Finished at:", datetime.now().strftime(datestr))
   print(f"Time taken was {d[0]:.0f} days {h[0]:.0f} hrs {m[0]:.0f} mins {s:.0f} secs\n")
 
-def train(net, data_x, data_y, epochs=1, lr=5e-5, device="cuda"):
-  """
-  Perform a training epoch for a given network based on data inputs
-  data_x, and correct outputs data_y
-  """
-
-  # move onto the specified device
-  net.board_cnn.to(device)
-  data_x = data_x.to(device)
-  data_y = data_y.to(device)
-
-  # put the model in training mode
-  net.board_cnn.train()
-
-  lossfcn = nn.MSELoss()
-  optim = torch.optim.Adam(net.board_cnn.parameters(), lr=lr)
-
-  batch_size = 64
-  num_batches = len(data_x) // batch_size
-
-  for i in range(epochs):
-
-    print(f"Starting epoch {i + 1}. There will be {num_batches} batches")
-
-    rand_idx = torch.randperm(data_x.shape[0])
-    avg_loss = 0
-
-    for n in range(num_batches):
-
-      batch_x = data_x[rand_idx[n * batch_size : (n+1) * batch_size]]
-      batch_y = data_y[rand_idx[n * batch_size : (n+1) * batch_size]]
-
-      # use the model for a prediction and calculate loss
-      net_y = net.board_cnn(batch_x)
-      loss = lossfcn(net_y.squeeze(1), batch_y)
-
-      # backpropagate
-      loss.backward()
-      optim.step()
-      optim.zero_grad()
-
-      avg_loss += loss.item()
-
-      # if n % 500 == 0:
-      #   print(f"Loss is {(avg_loss / (n + 1)) * 1000:.3f}, epoch {i + 1}, batch {n + 1} / {num_batches}")
-    
-    print(f"Loss is {(avg_loss / (num_batches * batch_size)) * 1000:.3f}, at end of epoch {i + 1}")
-
-  return net
-
 def inspect_data(data, log_level=1):
   """
   Get the max, mean, and std of data
@@ -746,23 +683,6 @@ def inspect_data(data, log_level=1):
   if log_level > 0:
     print(f"Normalised evaluations, max_value = {max_value:.3f} (max used = {new_max:.3f}), mean = {mean.item():.3f}, std = {std.item():.3f}, now max value is {torch.max(-1 * torch.min(data), torch.max(data)):.3f}, mean is {data.mean().item():.3f} and std is {data.std().item():.3f}")
   return new_max, mean, std
-
-def normalise_data(data, factors, clip=None):
-  """
-  Normalise data based on [max, mean, std]
-  """
-  max, mean, std = factors
-  d = ((data - mean) / std) / max
-  if clip is not None:
-    d = torch.clip(d, min=-clip, max=clip)
-  return d
-
-def denormalise_data(data, factors):
-  """
-  Undo normalisation based on [max, mean, std]
-  """
-  max, mean, std = factors
-  return (data * max * std) + mean
 
 class Trainer():
 
@@ -890,7 +810,7 @@ class Trainer():
     # each epoch, cover the entire training dataset
     for i in range(epochs):
 
-      print(f"Starting epoch {i + 1} / {epochs}.")
+      print(f"Starting epoch {i + 1} / {epochs}.", flush=True)
       total_batches = 0
       epoch_loss = 0
 
@@ -901,9 +821,13 @@ class Trainer():
         dataset = self.dataloader.load(self.data_dict['loadname'], id=j)
         data_x = dataset[0]
         if self.use_sf_eval:
-          data_y = dataset[1] * 10 # sf in 1/100th of pawn NOT 1/1000th
+          data_y = dataset[1]
         else:
           data_y = dataset[2]
+
+        # # go to device (larger memory footprint, small speed boost)
+        # data_x = data_x.to(device)
+        # data_y = data_y.to(device)
 
         # clip checkmates
         data_y = torch.clip(data_y, -self.checkmate_value, self.checkmate_value)
@@ -931,8 +855,10 @@ class Trainer():
         rand_idx = torch.randperm(data_x.shape[0])
         avg_loss = 0
 
-        if j % self.slice_log_rate == 1:
-          print(f"Epoch {i + 1}. Starting slice {slice_num + 1} / {len(self.data_dict['train_inds'])}. There will be {num_batches} batches.", end=" ", flush=True)
+        if slice_num % self.slice_log_rate == 0:
+          print(f"Epoch {i + 1}. Slice {slice_num + 1} / {len(self.data_dict['train_inds'])} has {num_batches} batches.", end=" ", flush=True)
+
+        t1 = time.time()
 
         # iterate through each batch for this slice of the dataset
         for n in range(num_batches):
@@ -940,7 +866,7 @@ class Trainer():
           batch_x = data_x[rand_idx[n * batch_size : (n+1) * batch_size]]
           batch_y = data_y[rand_idx[n * batch_size : (n+1) * batch_size]]
 
-          # go to cuda
+          # go to device (small memory footprint, slightly slower)
           batch_x = batch_x.to(device)
           batch_y = batch_y.to(device)
 
@@ -958,14 +884,16 @@ class Trainer():
           # if n % 500 == 0:
           #   print(f"Loss is {(avg_loss / (n + 1)) * 1000:.3f}, epoch {i + 1}, batch {n + 1} / {num_batches}")
 
+        t2 = time.time()
+
         # this dataset slice is finished
         epoch_loss += avg_loss
 
         avg_loss = avg_loss / num_batches
         avg_loss = avg_loss * 1e3
 
-        if j % self.slice_log_rate == 1:
-          print(f"Loss is {avg_loss:.3f} e-3", flush=True)
+        if slice_num % self.slice_log_rate == 0:
+          print(f"Loss is {avg_loss:.3f} e-3, took {t2 - t1:.1f}s", flush=True)
     
       # this epoch is finished
       epoch_loss = epoch_loss / total_batches
@@ -1014,7 +942,7 @@ class Trainer():
       dataset = self.dataloader.load(self.data_dict['loadname'], id=j)
       data_x = dataset[0]
       if self.use_sf_eval:
-        data_y = dataset[1] * 10 # sf in 1/100th of pawn NOT 1/1000th
+        data_y = dataset[1]
       else:
         data_y = dataset[2]
 
@@ -1042,8 +970,10 @@ class Trainer():
       avg_mean_sf_diff = 0
       avg_var_sf_diff = 0
 
-      if j % self.slice_log_rate == 1:
-        print(f"Testing. Starting slice {slice_num + 1} / {len(self.data_dict['test_inds'])}. There will be {num_batches} batches.", end=" ", flush=True)
+      if slice_num % self.slice_log_rate == 0:
+        print(f"Testing. Slice {slice_num + 1} / {len(self.data_dict['test_inds'])} has {num_batches} batches.", end=" ", flush=True)
+
+      t1 = time.time()
 
       # iterate through each batch for this slice of the dataset
       for n in range(num_batches):
@@ -1084,6 +1014,8 @@ class Trainer():
         # if n % 500 == 0:
         #   print(f"Loss is {(avg_loss / (n + 1)) * 1000:.3f}, epoch {i + 1}, batch {n + 1} / {num_batches}")
 
+      t2 = time.time()
+      
       # this dataset slice is finished
       test_loss += avg_loss
 
@@ -1096,8 +1028,8 @@ class Trainer():
       avg_loss = avg_loss / num_batches
       avg_loss = avg_loss * 1e3
 
-      if j % self.slice_log_rate == 1:
-        print(f"Loss is {avg_loss:.3f} e-3", flush=True)
+      if slice_num % self.slice_log_rate == 0:
+        print(f"Loss is {avg_loss:.3f} e-3, took {t2 - t1:.1f}s", flush=True)
 
     # the test is finished
     test_loss = test_loss / total_batches
@@ -1121,6 +1053,9 @@ class Trainer():
           f"(mean, std) -> Stockfish({test_mean_sf_diff:.3f}, {test_std_sf_diff:.3f}),",
           f"MyEval({test_mean_my_diff:.3f}, {test_std_my_diff:.3f})",
           flush=True)
+    
+    # put the model back into training mode
+    self.net.board_cnn.train()
     
     return test_report
   
@@ -1175,7 +1110,7 @@ if __name__ == "__main__":
   parser.add_argument("-t", "--timestamp", default=None)                  # timestamp override
   parser.add_argument("-p", "--program", default="default")               # training program name
   parser.add_argument("-lr", "--learning-rate", type=float, default=1e-7) # learning rate during training
-  parser.add_argument("--epochs", type=int, default=1)                    # number of training epochs
+  parser.add_argument("-e", "--epochs", type=int, default=5)              # number of training epochs
   parser.add_argument("--device", default="cuda")                         # device to use, "cpu" or "cuda"
   parser.add_argument("--batch-size", type=int, default=64)               # size of learning batches
   parser.add_argument("--loss-style", default="MSE")                      # loss function, 'MSE', 'L1', or 'Huber'
@@ -1186,9 +1121,10 @@ if __name__ == "__main__":
   parser.add_argument("--double-train", action="store_true")              # train on stockfish evaluations afterwards
   parser.add_argument("--use-sf-loss", action="store_true")               # use stockfish evaluation as target
   parser.add_argument("--dataset-name", default="datasetv3")              # name of training dataset to use
-  parser.add_argument("--dataset-train-num", type=int, default=60)        # number of data files to use for training
-  parser.add_argument("--dataset-test-num", type=int, default=69)         # number of data files to use for testing
+  parser.add_argument("--dataset-train-num", type=int, default=90)        # number of data files to use for training
+  parser.add_argument("--dataset-test-num", type=int, default=5)          # number of data files to use for testing
   parser.add_argument("--batch-limit", type=int, default=0)               # limit batches per file, useful for debugging
+  parser.add_argument("--slice-log-rate", type=int, default=5)            # log rate for slices during an epoch
 
   args = parser.parse_args()
 
@@ -1207,7 +1143,7 @@ if __name__ == "__main__":
   data_dict = {
     "path" : "/home/luke/chess",
     "loadpath" : "/python/datasets",
-    "loadfolder" : "datasetv3",
+    "loadfolder" : "datasetv4",
     "loadname" : "data_torch",
     "savepath" : "/python/models",
     "savefolder" : f"{group_name}/{run_name}",
@@ -1223,7 +1159,7 @@ if __name__ == "__main__":
   trainer = Trainer(data_dict)
 
   # apply generic settings
-  trainer.slice_log_rate = 5
+  trainer.slice_log_rate = args.slice_log_rate
   trainer.use_sf_eval = args.use_sf_loss
   trainer.use_sq_eval_sum_loss = True
   default_norm_factors = [7, 0, 2.159]
@@ -1252,7 +1188,7 @@ if __name__ == "__main__":
     # create and initialise the network
     in_features = 17
     out_features = 64
-    net = FCChessNet(in_features, out_features, num_blocks=trainer.param_2, 
+    net = FCChessNet(in_features, out_features, num_blocks=args.num_blocks, 
                     dropout_prob=args.dropout_prob)
     trainer.init(
       net=net,
@@ -1332,6 +1268,44 @@ if __name__ == "__main__":
 
     print_time_taken()
 
+  elif args.program == "compare_lr":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-7, 5e-7, 1e-6, 5e-6, 1e-5, 5e-5, 1e-4]
+    vary_2 = None
+    vary_3 = None
+    repeats = 1
+    trainer.param_1_name = "learning rate"
+    trainer.param_2_name = None
+    trainer.param_3_name = None
+    trainer.param_1, trainer.param_2, trainer.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    print(trainer.create_test_report())
+    
+    # create and initialise the network
+    in_features = 17
+    out_features = 64
+    net = FCChessNet(in_features, out_features, num_blocks=args.num_blocks, 
+                    dropout_prob=args.dropout_prob)
+    trainer.init(
+      net=net,
+      lr=trainer.param_1,
+      weight_decay=args.weight_decay,
+      loss_style=args.loss_style,
+    )
+
+    # ensure we do 5 epochs of training
+    args.epochs = 5
+
+    # now execute the training
+    trainer.train(
+      epochs=args.epochs,
+      norm_factors=default_norm_factors,
+      device=args.device
+    )
+
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
@@ -1349,13 +1323,13 @@ if __name__ == "__main__":
     # create and initialise the network
     in_features = 17
     out_features = 64
-    net = FCChessNet(in_features, out_features, num_blocks=trainer.param_2, 
+    net = FCChessNet(in_features, out_features, num_blocks=args.num_blocks, 
                     dropout_prob=args.dropout_prob)
     trainer.init(
       net=net,
       lr=args.learning_rate,
       weight_decay=args.weight_decay,
-      loss_style=trainer.param_3,
+      loss_style=args.loss_style,
     )
 
     # now execute the training
