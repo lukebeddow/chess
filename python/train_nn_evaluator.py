@@ -1271,12 +1271,12 @@ if __name__ == "__main__":
   elif args.program == "compare_lr":
 
     # define what to vary this training, dependent on job number
-    vary_1 = [1e-7, 5e-7, 1e-6, 5e-6, 1e-5, 5e-5, 1e-4]
-    vary_2 = None
+    vary_1 = [1e-6, 5e-6, 1e-5, 5e-5, 1e-4]
+    vary_2 = [False, True]
     vary_3 = None
     repeats = 1
     trainer.param_1_name = "learning rate"
-    trainer.param_2_name = None
+    trainer.param_2_name = "use sf eval"
     trainer.param_3_name = None
     trainer.param_1, trainer.param_2, trainer.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
                                                          param_3=vary_3, repeats=repeats)
@@ -1294,8 +1294,9 @@ if __name__ == "__main__":
       loss_style=args.loss_style,
     )
 
-    # ensure we do 5 epochs of training
+    # important! hardcode settings
     args.epochs = 5
+    trainer.use_sf_eval = trainer.param_2
 
     # now execute the training
     trainer.train(
