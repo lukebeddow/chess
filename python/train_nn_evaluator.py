@@ -2,6 +2,7 @@ import modules.board_module as bf
 import modules.tree_module as tf
 import modules.stockfish_module as sf
 from ModelSaver import ModelSaver
+import os
 import random
 from dataclasses import dataclass
 from collections import namedtuple
@@ -319,13 +320,15 @@ class EvalDataset(torch.utils.data.Dataset):
           else:
             self.boards[add_ind] = self.FEN_to_torch(self.positions[i].fen_string,
                                                     self.positions[i].move_vector[j].move_letters)
+          white_next = bf.is_white_next_FEN(self.positions[i].fen_string)
           if self.positions[i].move_vector[j].eval == "mate":
-            if not bf.is_white_next_FEN(self.positions[i].fen_string):
+            if not white_next:
               self.evals[add_ind] = -self.mate_value / self.stockfish_converstion
             else:
               self.evals[add_ind] = self.mate_value / self.stockfish_converstion
           else:
-            self.evals[add_ind] = self.positions[i].move_vector[j].eval
+            sign = (white_next * 2) - 1
+            self.evals[add_ind] = self.positions[i].move_vector[j].eval * -sign # if white next, engine is black, so *-1, else *1
           if self.convert_evals_to_pawns:
             self.evals[add_ind] *= self.stockfish_converstion
 
@@ -553,30 +556,32 @@ class FCResidualBlock(nn.Module):
 class FCChessNet(nn.Module):
 
   def __init__(self, in_channels, out_channels, num_blocks=3, dropout_prob=0.0,
-               block_type="residual"):
+               block_type="residual", layer_scaling=64):
 
     super(FCChessNet, self).__init__()
 
     self.in_channels = in_channels
 
     if block_type == "residual":
-      blocks = [FCResidualBlock(in_channels * 8 * 8, 
+      blocks = [FCResidualBlock(in_channels * layer_scaling, 
                                 dropout_prob=dropout_prob,
                                 numlayers=3) for i in range(num_blocks)]
     
-    else:
+    elif block_type == "simple":
       blocks = [nn.Sequential(
-        nn.Linear(in_channels * 8 * 8, in_channels * 8 * 8), 
+        nn.Linear(in_channels * layer_scaling, in_channels * layer_scaling), 
         nn.ReLU(),
         nn.Dropout(p=dropout_prob),
       ) for i in range(num_blocks)]
+    else:
+      raise RuntimeError(f"FCChessNet.__init__() error: block_type={block_type} not recognised")
 
     self.board_cnn = nn.Sequential(
       nn.Flatten(),
-      nn.Linear(in_channels * 8 * 8, in_channels * 8 * 8),
+      nn.Linear(in_channels * 64, in_channels * layer_scaling),
       nn.ReLU(),
       *blocks,
-      nn.Linear(in_channels * 8 * 8, out_channels),
+      nn.Linear(in_channels * layer_scaling, out_channels),
     )
 
   def forward(self, x):
@@ -684,6 +689,91 @@ def inspect_data(data, log_level=1):
     print(f"Normalised evaluations, max_value = {max_value:.3f} (max used = {new_max:.3f}), mean = {mean.item():.3f}, std = {std.item():.3f}, now max value is {torch.max(-1 * torch.min(data), torch.max(data)):.3f}, mean is {data.mean().item():.3f} and std is {data.std().item():.3f}")
   return new_max, mean, std
 
+def print_table(data_dict, timestamp):
+  """
+  Print a results table
+  """
+
+  group_name = timestamp[:8]
+  run_name = "run_{0}_A{1}"
+  run_starts = run_name.format(timestamp[-5:], "")
+
+  # get the jobs that correspond to this timestamp
+  group_path = f"{data_dict['path']}/{data_dict['savepath']}/{group_name}"
+  run_folders = [x for x in os.listdir(group_path) if x.startswith(run_starts)]
+
+  job_nums = []
+
+  for folder in run_folders:
+    num = folder.split(run_starts)[1] # from run_xx_xx_A5 -> 5"
+    job_nums.append(int(num))
+
+  # sort into numeric ascending order
+  job_nums.sort()
+
+  # check for failures
+  if len(job_nums) == 0:
+    print(f"train_nn_evaluator.py warning: print_table found zero trainings matching '{run_starts}'")
+
+  table = []
+
+  for j in job_nums:
+
+    # extract the test report data
+    data_dict["savefolder"] = f"{group_name}/{run_name.format(timestamp[-5:], j)}"
+    trainer = Trainer(data_dict)
+    names, matrix = trainer.load_test_report()
+    data_list = list(matrix[-1, :]) # take the last row (most recent data)
+
+    # now assemble this row of the table
+    data_row = [timestamp, j]
+    if trainer.param_1 is not None: data_row.append(trainer.param_1)
+    if trainer.param_2 is not None: data_row.append(trainer.param_2)
+    if trainer.param_3 is not None: data_row.append(trainer.param_3)
+    for d in data_list: data_row.append(d)
+    table.append(data_row)
+
+  # assemble the table column headings
+  headings = ["Timestamp     ", "Job"]
+  if trainer.param_1 is not None: headings.append(trainer.param_1_name)
+  if trainer.param_2 is not None: headings.append(trainer.param_2_name)
+  if trainer.param_3 is not None: headings.append(trainer.param_3_name)
+  for n in names: headings.append(n)
+
+  # fix later
+  program_str = f"Program = {trainer.program}\n\n"
+
+  # now prepare to print the table
+  print_str = """""" + program_str
+  heading_str = ""
+  for x in range(len(headings) - 1): heading_str += "{" + str(x) + "} | "
+  heading_str += "{" + str(len(headings) - 1) + "}"
+  row_str = heading_str[:]
+  heading_formatters = []
+  row_formatters = []
+  for x in range(len(headings)):
+    row_formatters.append("{" + f"{x}:<{len(headings[x]) + 0}" + "}")
+    heading_formatters.append("{" + f"{x}:<{len(headings[x]) + 0}" + "}")
+  heading_str = heading_str.format(*heading_formatters)
+  row_str = row_str.format(*row_formatters)
+
+  # assemble the table text
+  print_str += heading_str.format(*headings) + "\n"
+  # print(heading_str.format(*headings))
+  for i in range(len(table)):
+    # check if entry is incomplete
+    while len(table[i]) < len(headings): table[i] += ["N/F"]
+    for j, elem in enumerate(table[i]):
+      if isinstance(elem, float):
+        table[i][j] = "{:.3f}".format(elem)
+    # print(row_str.format(*table[i]))
+    print_str += row_str.format(*table[i]) + "\n"
+
+  # print and save the table
+  print("\n" + print_str)
+  with open(group_path + f"run_{timestamp[-5:]}_results.txt", 'w') as f:
+    f.write(print_str)
+
 class Trainer():
 
   # @dataclass
@@ -710,6 +800,8 @@ class Trainer():
     self.checkmate_value = 15 # clip checkmates to this value
     self.use_sf_eval = False
     self.use_sq_eval_sum_loss = True
+    self.test_report_name = "test_report"
+    self.test_report_seperator = "---\n"
 
     # prepare saving and loading
     self.data_dict = data_dict
@@ -720,6 +812,7 @@ class Trainer():
 
     # create variables
     self.batch_limit = None
+    self.program = None
     self.param_1 = None
     self.param_2 = None
     self.param_3 = None
@@ -910,7 +1003,7 @@ class Trainer():
 
       # save the model after this epoch
       self.datasaver.save(data_dict['savename'], self.net)
-      self.datasaver.save("test_report", txtstr=test_report, txtonly=True)
+      self.datasaver.save(self.test_report_name, txtstr=test_report, txtonly=True)
 
     # finally, return the network that we have trained
     return self.net
@@ -1065,18 +1158,18 @@ class Trainer():
     """
 
     report_str = """"""
-    sep = "---\n"
 
     report_str += f"Report for {self.data_dict['savefolder']}\n"
+    if self.program is not None: report_str += f"Program = {self.program}\n"
 
     if self.param_1 is not None:
-      report_str += sep
+      report_str += self.test_report_seperator
       if self.param_1 is not None: report_str += f"Param 1 name = {self.param_1_name}, value = {self.param_1}\n"
       if self.param_2 is not None: report_str += f"Param 2 name = {self.param_2_name}, value = {self.param_2}\n"
       if self.param_3 is not None: report_str += f"Param 3 name = {self.param_3_name}, value = {self.param_3}\n"
 
     if len(self.test_epochs) > 0:
-      report_str += sep
+      report_str += self.test_report_seperator
 
       header_str = f"{'Epoch':<6} | {'Train Loss / e-3':<16} | {'Test Loss / e-3':<16} | {'SF mean':<7} | {'SF std':<7} | {'My mean':<7} | {'My std':<7}"
       row_str = "{0:<6} | {1:<16.3f} | {2:<16.3f} | {3:<7.3f} | {4:<7.3f} | {5:<7.3f} | {6:<7.3f}"
@@ -1097,6 +1190,98 @@ class Trainer():
 
     return report_str
   
+  def load_test_report(self, as_string=False, string_input=None):
+    """
+    Load data from a test report
+    """
+
+    if string_input is None:
+
+      txt = self.datasaver.read_textfile(self.test_report_name)
+      if txt is None:
+        raise RuntimeError("Trainer.load_test_report() error: no test report found, txt=None")
+      if as_string: return txt
+      
+    else: txt = string_input
+
+    sections = txt.split(self.test_report_seperator)
+
+    found_meta = False
+    found_param = False
+    found_data = False
+    for i, s in enumerate(sections):
+      if s.startswith("Report"):
+        meta_data = s
+        found_meta = True
+      elif s.startswith("Param"):
+        param_data = s
+        found_param = True
+      elif s.startswith("Epoch"):
+        test_data = s
+        found_data = True
+
+    if found_meta:
+      lines = meta_data.splitlines()
+      for l in lines:
+        if l.startswith("Program"):
+          self.program = l.splits(" = ")[1]
+
+    if found_param:
+      """example of string we should have:
+      ---
+      Param 1 name = learning rate, value = 1e-06
+      Param 2 name = use sf eval, value = False
+      ---
+      """
+      lines = param_data.splitlines()
+      for i, l in enumerate(lines):
+        splits = l.split(", value = ")
+        value = splits[1]
+        name = splits[0].split(" = ")[1]
+        if i == 0:
+          self.param_1 = value
+          self.param_1_name = name
+        elif i == 1:
+          self.param_2 = value
+          self.param_2_name = name
+        elif i == 2:
+          self.param_3 = value
+          self.param_3_name = name
+
+    if not found_data:
+      raise RuntimeError("Trainer.load_test_report() error: 'Epoch' section not found, does test report contain data?")
+
+    # now handle the test data
+    lines = test_data.splitlines()
+
+    names = []
+    data = []
+
+    datastarted = False
+
+    for i, l in enumerate(lines):
+
+      splits = l.split(" | ")
+
+      if splits[0].startswith("Epoch"):
+        for field in splits:
+          names.append(field)
+        datastarted = True
+      elif datastarted:
+        new_elem = []
+        for field in splits:
+          new_elem.append(float(field))
+        data.append(new_elem)
+
+    if not datastarted:
+      print("Trainer.load_test_report() warning: datastarted=False, no data found in test report")
+      return None, None
+
+    # convert into a numpy matrix
+    matrix = np.array(data)
+
+    return names, matrix
+
 if __name__ == "__main__":
 
   # starting time
@@ -1109,7 +1294,7 @@ if __name__ == "__main__":
   parser.add_argument("-j", "--job", type=int, default=1)                 # job input number
   parser.add_argument("-t", "--timestamp", default=None)                  # timestamp override
   parser.add_argument("-p", "--program", default="default")               # training program name
-  parser.add_argument("-lr", "--learning-rate", type=float, default=1e-7) # learning rate during training
+  parser.add_argument("-lr", "--learning-rate", type=float, default=1e-5) # learning rate during training
   parser.add_argument("-e", "--epochs", type=int, default=5)              # number of training epochs
   parser.add_argument("--device", default="cuda")                         # device to use, "cpu" or "cuda"
   parser.add_argument("--batch-size", type=int, default=64)               # size of learning batches
@@ -1125,16 +1310,13 @@ if __name__ == "__main__":
   parser.add_argument("--dataset-test-num", type=int, default=5)          # number of data files to use for testing
   parser.add_argument("--batch-limit", type=int, default=0)               # limit batches per file, useful for debugging
   parser.add_argument("--slice-log-rate", type=int, default=5)            # log rate for slices during an epoch
+  parser.add_argument("--print-table", action="store_true")               # are we printing a results table
 
   args = parser.parse_args()
 
   timestamp = args.timestamp if args.timestamp else datetime.now().strftime(datestr)
   run_name = f"run_{timestamp[-5:]}_A{args.job}"
   group_name = timestamp[:8]
-
-  print("Run name:", run_name)
-  print("Group name:", group_name)
-  print("Program:", args.program)
 
   if args.torch_threads > 0:
     torch.set_num_threads(args.torch_threads)
@@ -1155,10 +1337,21 @@ if __name__ == "__main__":
     "save_log_level" : 1,
   }
 
+  if args.print_table:
+    if args.timestamp is None:
+      print("train_nn_evaluator.py error: print_table=True but timestamp not given")
+    print_table(data_dict, args.timestamp)
+    exit()
+
+  print("Run name:", run_name)
+  print("Group name:", group_name)
+  print("Program:", args.program)
+
   # create the trainer object
   trainer = Trainer(data_dict)
 
   # apply generic settings
+  trainer.program = args.program
   trainer.slice_log_rate = args.slice_log_rate
   trainer.use_sf_eval = args.use_sf_loss
   trainer.use_sq_eval_sum_loss = True
@@ -1297,6 +1490,47 @@ if __name__ == "__main__":
     # important! hardcode settings
     args.epochs = 5
     trainer.use_sf_eval = trainer.param_2
+
+    # now execute the training
+    trainer.train(
+      epochs=args.epochs,
+      norm_factors=default_norm_factors,
+      device=args.device
+    )
+
+    print_time_taken()
+
+  elif args.program == "compare_layers":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 2, 3]
+    vary_2 = [32, 64, 96]
+    vary_3 = None
+    repeats = None
+    trainer.param_1_name = "num layers"
+    trainer.param_2_name = "layer width"
+    trainer.param_3_name = None
+    trainer.param_1, trainer.param_2, trainer.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    print(trainer.create_test_report())
+    
+    # create and initialise the network
+    in_features = 17
+    out_features = 64
+    net = FCChessNet(in_features, out_features, num_blocks=trainer.param_1, 
+                    dropout_prob=0.0, layer_scaling=trainer.param_2,
+                    block_type="simple")
+    trainer.init(
+      net=net,
+      lr=args.learning_rate,
+      weight_decay=args.weight_decay,
+      loss_style=args.loss_style,
+    )
+
+    # important! hardcode settings
+    args.epochs = 5
+    args.learning_rate = 1e-5
+    trainer.use_sf_eval = True
 
     # now execute the training
     trainer.train(
