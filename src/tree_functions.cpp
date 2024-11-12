@@ -2075,7 +2075,17 @@ std::vector<TreeKey> LayeredTree::add_depth_at_key(TreeKey key)
     bool white_to_play = key_layer_p->white_to_play;
 
     // now generate and evaluate all possible replies on this board
-    generated_moves_struct gen_moves = generate_moves(board, white_to_play);
+    generated_moves_struct gen_moves;
+    if (use_nn_eval) {
+        #if defined(LUKE_PYTORCH)
+            gen_moves = generate_moves_nn(board, white_to_play);
+        #else
+            throw std::runtime_error("LUKE_PYTORCH not defined");
+        #endif
+    }
+    else {
+        gen_moves = generate_moves(board, white_to_play);
+    }
 
     // std::cout << "After generate moves\n" << std::flush;
 
@@ -2878,6 +2888,8 @@ void Engine::depth_search(std::unique_ptr<LayeredTree>& tree_ptr, int depth, int
     settings.width = width;
     settings.depth = depth;
 
+    tree_ptr->use_nn_eval = use_nn_eval;
+
     // how to handle printing during search?
     // print_layer(tree_ptr, 0);
 
@@ -3108,12 +3120,12 @@ std::vector<MoveEntry> Engine::generate_engine_moves(Board board, bool white_to_
 
     bool game_continues;
 
-    std::vector<int> depth_vector {2, 4, 6, 8};
-    std::vector<int> width_vector {30, 15, 10, 5};
+    // std::vector<int> depth_vector {2, 4, 6, 8};
+    // std::vector<int> width_vector {30, 15, 10, 5};
     std::vector<int> prune_slack_vector {10000, 1000, 500, 250};
 
-    // std::vector<int> depth_vector {8};
-    // std::vector<int> width_vector {10};
+    std::vector<int> depth_vector {1};
+    std::vector<int> width_vector {40};
 
     // depth search with iterative deepening
     for (int i = 0; i < depth_vector.size(); i++) {

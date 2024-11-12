@@ -9,6 +9,7 @@ import time
 import argparse
 import numpy as np
 from scipy.stats import spearmanr
+import gc
 
 Move = namedtuple("Move",
                   ("move_letters", "eval", "depth", "ranking"))
@@ -253,6 +254,10 @@ def generate_sf_data(args):
   random.seed(rand_seed)
   rand_pos = random.sample(lines, num_rand)
 
+  # remove the file to free up memory
+  del lines
+  gc.collect()
+
   # prepare a stockfish evaluator
   sf_instance = sf.StockfishWrapper()
   sf_instance.target_depth = 20
@@ -356,6 +361,7 @@ def generate_sf_data(args):
 if __name__ == "__main__":
 
   parser = argparse.ArgumentParser()
+  parser.add_argument("-j", "--job", type=int, default=1)                 # job input number
   parser.add_argument("--evaluate-engine", action="store_true")     # compare my engine against stockfish
   parser.add_argument("--generate-data", action="store_true")       # generate stockfish data
   parser.add_argument("--num-rand", type=int, default=10)           # number of random samples
@@ -370,6 +376,7 @@ if __name__ == "__main__":
   args = parser.parse_args()
   
   if args.generate_data:
+    time.sleep(args.job)
     generate_sf_data(args)
 
   elif args.evaluate_engine:

@@ -31,7 +31,6 @@ class EvalDataset(torch.utils.data.Dataset):
 
     t1 = time.time()
 
-    self.modelsaver = ModelSaver(datapath, log_level=log_level)
     self.log_level = log_level
     self.positions = []
     self.seen_values = None
@@ -53,19 +52,23 @@ class EvalDataset(torch.utils.data.Dataset):
     self.evals = []
     self.square_evals = []
 
-    # automatically get all indexes if not specified
-    if indexes is None:
-      indexes = list(range(self.modelsaver.get_recent_file(name=sample_names, 
-                                                           return_int=True) + 1))
+    if auto_load:
 
-    for ind in indexes:
-      newdata = self.modelsaver.load(sample_names, id=ind)
-      self.positions += newdata
+      self.modelsaver = ModelSaver(datapath, log_level=log_level)
 
-    t2 = time.time()
+      # automatically get all indexes if not specified
+      if indexes is None:
+        indexes = list(range(self.modelsaver.get_recent_file(name=sample_names, 
+                                                            return_int=True) + 1))
 
-    if self.log_level >= 1:
-      print(f"EvalDataset(): {len(indexes)} files loaded {t2 - t1:.2f} seconds")
+      for ind in indexes:
+        newdata = self.modelsaver.load(sample_names, id=ind)
+        self.positions += newdata
+
+      t2 = time.time()
+
+      if self.log_level >= 1:
+        print(f"EvalDataset(): {len(indexes)} files loaded {t2 - t1:.2f} seconds")
 
   def __len__(self):
     return len(self.positions)
@@ -82,7 +85,10 @@ class EvalDataset(torch.utils.data.Dataset):
     """
 
     if move is None:
-      boardvec = bf.FEN_to_board_vectors(fen_string)
+      if eval_sqs:
+        boardvec = bf.FEN_to_board_vectors_with_eval(fen_string)
+      else:
+        boardvec = bf.FEN_to_board_vectors(fen_string)
     else:
       if eval_sqs:
         boardvec = bf.FEN_move_eval_to_board_vectors(fen_string, move)
@@ -273,7 +279,6 @@ class EvalDataset(torch.utils.data.Dataset):
       self.evals = torch.zeros(num_lines, dtype=torch.float)
       if self.save_sq_eval:
         self.square_evals = torch.zeros((num_lines, 64), dtype=torch.float)
-      add_ind = 0
       error_moves = 0
       if self.log_level > 0:
         if indexes_only is not None:
@@ -281,8 +286,17 @@ class EvalDataset(torch.utils.data.Dataset):
         else:
           print(f"self.use_all_moves = True, found {num_lines} lines (emerging from {num_pos} positions)")
     else:
-      self.boards = torch.zeros((num_pos, *example.shape), dtype=example.dtype)
-      self.evals = torch.zeros(num_pos, dtype=torch.float)
+      if indexes_only is not None:
+        if len(indexes_only) > num_pos:
+          raise RuntimeError(f"EvalDataset.to_torch() error: num_pos = {num_pos}, but number of selected indexes exceeds this = {len(indexes_only)}")
+        num_gen = len(indexes_only)
+      else: num_gen = num_pos
+      self.boards = torch.zeros((num_gen, *example.shape), dtype=example.dtype)
+      self.evals = torch.zeros(num_gen, dtype=torch.float)
+      if self.save_sq_eval:
+        self.square_evals = torch.zeros((num_gen, 64), dtype=torch.float)
+
+    add_ind = 0
     
     for i in range(num_pos):
 
@@ -335,16 +349,46 @@ class EvalDataset(torch.utils.data.Dataset):
           add_ind += 1
 
       else:
-        self.boards[i] = self.FEN_to_torch(self.positions[i].fen_string)
-        if self.positions[i].eval == "mate":
-          if bf.is_white_next_FEN(self.positions[i].fen_string):
-            self.evals[i] = -self.mate_value / self.stockfish_converstion
+
+        if indexes_only is not None:
+          # is this index one we want to include
+          if indexes_only[selected_indexes_ind] == proxy_ind:
+            selected_indexes_ind += 1
+            # check if we have finished this batch
+            if selected_indexes_ind >= len(indexes_only):
+              break_out = True
+              break
           else:
-            self.evals[i] = self.mate_value / self.stockfish_converstion
+            # skip the current index
+            proxy_ind += 1
+            continue
+
+        if self.save_sq_eval:
+          self.boards[add_ind], self.square_evals[add_ind] = self.FEN_to_torch(
+            self.positions[i].fen_string, eval_sqs=self.save_sq_eval
+          )
         else:
-          self.evals[i] = self.positions[i].eval
+          self.boards[add_ind] = self.FEN_to_torch(self.positions[i].fen_string,
+                                                  self.positions[i].move_vector[j].move_letters)
+        white_next = bf.is_white_next_FEN(self.positions[i].fen_string)
+        sign = (white_next * 2) - 1
+
+        # if white plays next, a + evaluation is appropriate
+        # if black plays next, a + evaluation means good for black, so should be flipped
+
+        sign = 1 # DISABLE THIS SWITCHING
+
+        if self.positions[add_ind].eval == "mate":
+          if bf.is_white_next_FEN(self.positions[i].fen_string):
+            self.evals[add_ind] = -self.mate_value / self.stockfish_converstion
+          else:
+            self.evals[add_ind] = self.mate_value / self.stockfish_converstion
+        else:
+          self.evals[add_ind] = int(self.positions[add_ind].eval) * sign # convert to OBJECTIVE evaluation
         if self.convert_evals_to_pawns:
-          self.evals[i] *= self.stockfish_converstion
+          self.evals[add_ind] *= self.stockfish_converstion
+
+        add_ind += 1
 
     if self.use_all_moves and indexes_only is None:
       if error_moves > 0:
@@ -369,7 +413,7 @@ class EvalDataset(torch.utils.data.Dataset):
     if self.log_level > 0:
       if self.use_all_moves:
         total_num = num_lines
-      else: total_num = num_pos
+      else: total_num = num_gen
       print(f"EvalDataset(): {total_num} positions converted in {t2 - t1:.2f} seconds, average {((t2 - t1) / total_num) * 1e3:.3f} ms per position")
 
     return
@@ -431,6 +475,7 @@ class EvalDataset(torch.utils.data.Dataset):
       print(f"EvalDataset(): {num_mates} mate positions found in {t2 - t1:.2f} seconds{', and removed' if remove else ''}")
 
     return num_mates
+
 
 class ResidualBlock(nn.Module):
 
@@ -588,6 +633,58 @@ class FCChessNet(nn.Module):
     for l in self.board_cnn:
       x = l(x)
     return x
+  
+class ChessNetAttention(nn.Module):
+
+  def __init__(self, in_channels, penultimate_channels=64, num_blocks=1, layer_scaling=64, dropout_prob=0):
+
+    super(ChessNetAttention, self).__init__()
+
+    blocks = [nn.Sequential(
+      nn.Linear(in_channels * layer_scaling, in_channels * layer_scaling), 
+      nn.ReLU(),
+      nn.Dropout(p=dropout_prob),
+    ) for i in range(num_blocks)]
+
+    self.board_cnn = nn.Sequential(
+      nn.Flatten(),
+      nn.Linear(in_channels * 64, in_channels * layer_scaling),
+      nn.ReLU(),
+      *blocks,
+      nn.Linear(in_channels * layer_scaling, penultimate_channels),
+    )
+
+    # penultimate layer with 64 outputs (square evaluations)
+    self.square_eval_layer = nn.Linear(penultimate_channels, 64)
+    
+    # attention layer to compute attention weights for each square
+    self.attention_layer = nn.Linear(penultimate_channels, 64)  # Produces 64 attention weights
+
+    # final layer that takes the attention-weighted sum of square evaluations to produce a board evaluation
+    self.board_eval_layer = nn.Linear(64, 1)
+  
+  def forward(self, x):
+
+    # go through main network
+    for l in self.board_cnn:
+      x = l(x)
+    
+    # now generate square-by-square evaluations
+    square_eval = self.square_eval_layer(x)  # Output shape: [batch_size, 64]
+    
+    # compute attention weights
+    attention_weights = nn.functional.softmax(self.attention_layer(x), dim=1)  # Output shape: [batch_size, 64]
+    
+    # apply attention weights to square evaluations
+    attention_applied = square_eval * attention_weights  # Element-wise multiplication; shape: [batch_size, 64]
+    
+    # aggregate weighted square evaluations into a single board evaluation
+    board_eval = self.board_eval_layer(attention_applied)
+
+    # combine into a single tensor [batch, 65 (elem0=board eval, elem1-64=square evals)]
+    output = torch.cat((board_eval, square_eval), dim=1)
+    
+    return output
     
 # ----- training functionality ----- #
   
@@ -776,18 +873,24 @@ def print_table(data_dict, timestamp):
 
 class Trainer():
 
-  # @dataclass
-  # class Parameters:
-  #   num_epochs: int = 10
-  #   test_freq: int = 1000
-  #   save_freq: int = 1000
-  #   use_curriculum: bool = False
+  @dataclass
+  class Parameters:
+    num_epochs: int = 5
+    
+    learning_rate: float = 1e-5
+    weight_decay: float = 1e-4
+    loss_style: str = 'MSE'
+    batch_size: int = 64
+    dropout_prob: float = 0.0
 
-  #   def update(self, newdict):
-  #     for key, value in newdict.items():
-  #       if hasattr(self, key):
-  #         setattr(self, key, value)
-  #       else: raise RuntimeError(f"incorrect key: {key}")
+    use_combined_loss: bool = False
+    use_sf_eval: bool = False
+
+    def update(self, newdict):
+      for key, value in newdict.items():
+        if hasattr(self, key):
+          setattr(self, key, value)
+        else: raise RuntimeError(f"incorrect key: {key}")
 
   def __init__(self, data_dict, log_level=1):
     """
@@ -800,6 +903,7 @@ class Trainer():
     self.checkmate_value = 15 # clip checkmates to this value
     self.use_sf_eval = False
     self.use_sq_eval_sum_loss = True
+    self.use_combined_loss = False
     self.test_report_name = "test_report"
     self.test_report_seperator = "---\n"
 
@@ -834,7 +938,7 @@ class Trainer():
 
     # input critical learning features
     self.net = net
-    self.optim = torch.optim.Adam(net.board_cnn.parameters(), lr=lr, weight_decay=weight_decay)
+    self.optim = torch.optim.Adam(net.parameters(), lr=lr, weight_decay=weight_decay)
 
     if loss_style.lower() == "mse":
       self.lossfcn = nn.MSELoss()
@@ -868,7 +972,17 @@ class Trainer():
     Calculate the loss
     """
 
-    if self.use_sf_eval:
+    if self.use_combined_loss:
+
+      # take the first element in each vector across the whole batch
+      loss_board_eval = self.lossfcn(net_y[:, 0], true_y[:, 0])
+
+      # sum the remaining elements
+      loss_square_eval = self.lossfcn(net_y[:, 1:], true_y[:, 1:])
+
+      loss = loss_board_eval + loss_square_eval
+
+    elif self.use_sf_eval:
 
       loss = self.lossfcn(torch.sum(net_y, dim=1), true_y)
 
@@ -882,6 +996,36 @@ class Trainer():
         loss += torch.pow(torch.sum(net_y, dim=1) - torch.sum(true_y, dim=1), 2).mean()
 
     return loss
+  
+  def prepare_data(self, name, id, to_device=None, return_dataset=False):
+    """
+    Load and process the data
+    """
+
+    # load this segment of the dataset
+    dataset = self.dataloader.load(name, id=id)
+    data_x = dataset[0]
+    if self.use_combined_loss:
+      data_y = torch.cat((dataset[1].unsqueeze(1), dataset[2]), dim=1)
+    elif self.use_sf_eval:
+      data_y = dataset[1]
+    else:
+      data_y = dataset[2]
+
+    # clip checkmates
+    data_y = torch.clip(data_y, -self.checkmate_value, self.checkmate_value)
+
+    # normalise y labels
+    data_y = self.normalise_data(data_y)
+
+    if to_device is not None:
+      data_x = data_x.to(to_device)
+      data_y = data_y.to(to_device)
+
+    if return_dataset:
+      return data_x, data_y, dataset[1], dataset[2]
+    else:
+      return data_x, data_y
 
   def train(self, epochs, norm_factors,
             device="cuda", batch_size=64,
@@ -892,10 +1036,10 @@ class Trainer():
     """
 
     # move onto the specified device
-    self.net.board_cnn.to(device)
+    self.net.to(device)
 
     # put the model in training mode
-    self.net.board_cnn.train()
+    self.net.train()
 
     # save the normalisation factors
     self.norm_factors = norm_factors
@@ -911,22 +1055,7 @@ class Trainer():
       for slice_num, j in enumerate(self.data_dict['train_inds']):
 
         # load this segment of the dataset
-        dataset = self.dataloader.load(self.data_dict['loadname'], id=j)
-        data_x = dataset[0]
-        if self.use_sf_eval:
-          data_y = dataset[1]
-        else:
-          data_y = dataset[2]
-
-        # # go to device (larger memory footprint, small speed boost)
-        # data_x = data_x.to(device)
-        # data_y = data_y.to(device)
-
-        # clip checkmates
-        data_y = torch.clip(data_y, -self.checkmate_value, self.checkmate_value)
-
-        # normalise y labels
-        data_y = self.normalise_data(data_y)
+        data_x, data_y = self.prepare_data(self.data_dict['loadname'], j)
 
         if examine_dist:
           import matplotlib.pyplot as plt
@@ -964,7 +1093,7 @@ class Trainer():
           batch_y = batch_y.to(device)
 
           # use the model for a prediction and calculate loss
-          net_y = self.net.board_cnn(batch_x).squeeze(1)
+          net_y = self.net(batch_x).squeeze(1)
           loss = self.calc_loss(net_y, batch_y)
 
           # backpropagate
@@ -1005,6 +1134,10 @@ class Trainer():
       self.datasaver.save(data_dict['savename'], self.net)
       self.datasaver.save(self.test_report_name, txtstr=test_report, txtonly=True)
 
+      # trace and save the traced model as well
+      traced_net = torch.jit.trace(self.net, batch_x)
+      traced_net.save(self.datasaver.get_current_path() + "/traced_model.pt")
+
     # finally, return the network that we have trained
     return self.net
   
@@ -1015,10 +1148,10 @@ class Trainer():
     """
 
     # move onto the specified device
-    self.net.board_cnn.to(device)
+    self.net.to(device)
 
     # put the model in training mode
-    self.net.board_cnn.eval()
+    self.net.eval()
 
     total_batches = 0
     test_loss = 0
@@ -1028,22 +1161,17 @@ class Trainer():
     test_mean_sf_diff = 0
     test_std_sf_diff = 0
 
+    my_diff_means = []
+    my_diff_vars = []
+    sf_diff_means = []
+    sf_diff_vars = []
+
     # load the dataset in a series of slices
     for slice_num, j in enumerate(self.data_dict['test_inds']):
 
       # load this segment of the dataset
-      dataset = self.dataloader.load(self.data_dict['loadname'], id=j)
-      data_x = dataset[0]
-      if self.use_sf_eval:
-        data_y = dataset[1]
-      else:
-        data_y = dataset[2]
-
-      # clip checkmates
-      data_y = torch.clip(data_y, -self.checkmate_value, self.checkmate_value)
-
-      # normalise y labels
-      data_y = self.normalise_data(data_y)
+      data_x, data_y, dataset_1, dataset_2 = self.prepare_data(self.data_dict['loadname'], j,
+                                                               return_dataset=True)
 
       num_batches = len(data_x) // batch_size
       if num_batches == 0:
@@ -1079,30 +1207,41 @@ class Trainer():
         batch_y = batch_y.to(device)
 
         # extract the evaluations from stockfish (sf) and my evaluation function (my)
-        sf_evals = dataset[1][rand_idx[n * batch_size : (n+1) * batch_size]].to(device)
-        my_evals = torch.sum(dataset[2][rand_idx[n * batch_size : (n+1) * batch_size]], dim=1).to(device)
+        sf_evals = dataset_1[rand_idx[n * batch_size : (n+1) * batch_size]].to(device)
+        my_evals = torch.sum(dataset_2[rand_idx[n * batch_size : (n+1) * batch_size]], dim=1).to(device)
 
         with torch.no_grad():
 
           # use the model for a prediction and calculate loss
-          net_y = self.net.board_cnn(batch_x).squeeze(1)
+          net_y = self.net(batch_x).squeeze(1)
           loss = self.calc_loss(net_y, batch_y)
 
         avg_loss += loss.item()
 
         # convert network prediction to evaluations
-        net_y_evals = self.denormalise_data(net_y)
-        net_y_evals = torch.sum(net_y_evals, dim=1)
+        net_y_denorm = self.denormalise_data(net_y)
 
         # examine performance relative to stockfish evaluation function
-        sf_diff = torch.abs(net_y_evals - sf_evals)
-        avg_mean_sf_diff += torch.mean(sf_diff).item()
-        avg_var_sf_diff += torch.pow(torch.std(sf_diff), 2).item()
+        if self.use_combined_loss:
+          net_sf_eval = net_y_denorm[:, 0]
+          net_my_evals = torch.sum(net_y_denorm[:, 1:], dim=1)
+          sf_diff = torch.abs(net_sf_eval - sf_evals)
+          my_diff = torch.abs(net_my_evals - my_evals)
+        else:
+          net_y_evals = torch.sum(net_y_denorm, dim=1)
+          sf_diff = torch.abs(net_y_evals - sf_evals)
+          my_diff = torch.abs(net_y_evals - my_evals)
 
-        # examine performance relative to my evaluation function
-        my_diff = torch.abs(net_y_evals - my_evals)
+        avg_mean_sf_diff += torch.mean(sf_diff).item()
+        avg_var_sf_diff += torch.var(sf_diff).item()
         avg_mean_my_diff += torch.mean(my_diff).item()
-        avg_var_my_diff += torch.pow(torch.std(my_diff), 2).item()
+        avg_var_my_diff += torch.var(my_diff).item()
+
+        # save the mean and variance of each batch
+        my_diff_means.append(torch.mean(my_diff).item())
+        my_diff_vars.append(torch.var(my_diff).item())
+        sf_diff_means.append(torch.mean(sf_diff).item())
+        sf_diff_vars.append(torch.var(sf_diff).item())
 
         # if n % 500 == 0:
         #   print(f"Loss is {(avg_loss / (n + 1)) * 1000:.3f}, epoch {i + 1}, batch {n + 1} / {num_batches}")
@@ -1133,25 +1272,46 @@ class Trainer():
     test_mean_sf_diff = test_mean_sf_diff / total_batches
     test_std_sf_diff = (test_std_sf_diff / total_batches) ** 0.5 # convert from variance to std dev
 
+    # calculate the final mean and variance of each batch
+    my_diff_means = np.array(my_diff_means)
+    my_diff_overall_mean = np.mean(my_diff_means)
+    my_diff_overal_std = np.sqrt(np.mean(my_diff_vars) + np.mean(np.power(my_diff_means - my_diff_overall_mean, 2)))
+
+    sf_diff_means = np.array(sf_diff_means)
+    sf_diff_overall_mean = np.mean(sf_diff_means)
+    sf_diff_overal_std = np.sqrt(np.mean(sf_diff_vars) + np.mean(np.power(sf_diff_means - sf_diff_overall_mean, 2)))
+
     self.test_epochs.append(epoch)
     self.test_loss.append(test_loss)
-    self.test_mean_my_diff.append(test_mean_my_diff)
-    self.test_std_my_diff.append(test_std_my_diff)
-    self.test_mean_sf_diff.append(test_mean_sf_diff)
-    self.test_std_sf_diff.append(test_std_sf_diff)
+    self.test_mean_my_diff.append(my_diff_overall_mean) #test_mean_my_diff)
+    self.test_std_my_diff.append(my_diff_overal_std) #test_std_my_diff)
+    self.test_mean_sf_diff.append(sf_diff_overall_mean) #test_mean_sf_diff)
+    self.test_std_sf_diff.append(sf_diff_overal_std) #test_std_sf_diff)
 
     test_report = self.create_test_report()
 
     print(f"Testing has finished after {total_batches} batches. Overall average loss = {test_loss:.3f} e-3.", 
           f"(mean, std) -> Stockfish({test_mean_sf_diff:.3f}, {test_std_sf_diff:.3f}),",
-          f"MyEval({test_mean_my_diff:.3f}, {test_std_my_diff:.3f})",
+          f"MyEval({test_mean_my_diff:.3f}, {test_std_my_diff:.3f}) (OLD)",
+          flush=True)
+    
+    print(f"Testing has finished after {total_batches} batches. Overall average loss = {test_loss:.3f} e-3.", 
+          f"(mean, std) -> Stockfish({sf_diff_overall_mean:.3f}, {sf_diff_overal_std:.3f}),",
+          f"MyEval({my_diff_overall_mean:.3f}, {my_diff_overal_std:.3f})",
           flush=True)
     
     # put the model back into training mode
-    self.net.board_cnn.train()
+    self.net.train()
     
     return test_report
   
+  def save_hyperparameters(self):
+    """
+    Save a text file detailing the key hyperparameters used for training
+    """
+    
+    pass
+
   def create_test_report(self):
     """
     Return a string which summarises how the testing is going
@@ -1224,7 +1384,7 @@ class Trainer():
       lines = meta_data.splitlines()
       for l in lines:
         if l.startswith("Program"):
-          self.program = l.splits(" = ")[1]
+          self.program = l.split(" = ")[1]
 
     if found_param:
       """example of string we should have:
@@ -1305,9 +1465,9 @@ if __name__ == "__main__":
   parser.add_argument("--torch-threads", type=int, default=1)             # number of threads to allocate to pytorch, 0 to disable
   parser.add_argument("--double-train", action="store_true")              # train on stockfish evaluations afterwards
   parser.add_argument("--use-sf-loss", action="store_true")               # use stockfish evaluation as target
-  parser.add_argument("--dataset-name", default="datasetv3")              # name of training dataset to use
-  parser.add_argument("--dataset-train-num", type=int, default=90)        # number of data files to use for training
-  parser.add_argument("--dataset-test-num", type=int, default=5)          # number of data files to use for testing
+  parser.add_argument("--dataset-name", default=None)                     # name of training dataset to use
+  parser.add_argument("--train-num", type=int, default=140)               # number of data files to use for training
+  parser.add_argument("--test-num", type=int, default=4)                  # number of data files to use for testing
   parser.add_argument("--batch-limit", type=int, default=0)               # limit batches per file, useful for debugging
   parser.add_argument("--slice-log-rate", type=int, default=5)            # log rate for slices during an epoch
   parser.add_argument("--print-table", action="store_true")               # are we printing a results table
@@ -1325,14 +1485,14 @@ if __name__ == "__main__":
   data_dict = {
     "path" : "/home/luke/chess",
     "loadpath" : "/python/datasets",
-    "loadfolder" : "datasetv4",
+    "loadfolder" : "datasetv7" if args.dataset_name is None else args.dataset_name,
     "loadname" : "data_torch",
     "savepath" : "/python/models",
     "savefolder" : f"{group_name}/{run_name}",
     "savename" : "network",
-    "train_inds" : list(range(1, args.dataset_train_num + 1)),
-    "test_inds" : list(range(args.dataset_train_num + 1, 
-                             args.dataset_train_num + args.dataset_test_num + 1)),
+    "train_inds" : list(range(1, args.train_num + 1)),
+    "test_inds" : list(range(args.train_num + 1, 
+                             args.train_num + args.test_num + 1)),
     "load_log_level" : 0,
     "save_log_level" : 1,
   }
@@ -1356,6 +1516,7 @@ if __name__ == "__main__":
   trainer.use_sf_eval = args.use_sf_loss
   trainer.use_sq_eval_sum_loss = True
   default_norm_factors = [7, 0, 2.159]
+  default_norm_factors = [10, 0, 4]
 
   # apply generic command line settings
   if args.batch_limit > 0:
@@ -1398,10 +1559,6 @@ if __name__ == "__main__":
     )
 
     print_time_taken()
-
-    # additional save of the finished model
-    modelsaver = ModelSaver("/home/luke/chess/python/models/")
-    modelsaver.save("chessnet_model", trainer.net)
 
   elif args.program == "compare_double":
 
@@ -1531,6 +1688,51 @@ if __name__ == "__main__":
     args.epochs = 5
     args.learning_rate = 1e-5
     trainer.use_sf_eval = True
+
+    # now execute the training
+    trainer.train(
+      epochs=args.epochs,
+      norm_factors=default_norm_factors,
+      device=args.device
+    )
+
+    print_time_taken()
+
+  elif args.program == "combined_loss":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [True, False]
+    vary_2 = None
+    vary_3 = None
+    repeats = None
+    trainer.param_1_name = "use attention"
+    trainer.param_2_name = None
+    trainer.param_3_name = None
+    trainer.param_1, trainer.param_2, trainer.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    print(trainer.create_test_report())
+    
+    # create and initialise the networks
+    in_features = 17
+    if trainer.param_1:
+      net = ChessNetAttention(in_features, penultimate_channels=64, num_blocks=1,
+                              layer_scaling=64, dropout_prob=0.0)
+    else:
+      out_features = 65
+      net = FCChessNet(in_features, out_features, num_blocks=1, block_type="simple",
+                      dropout_prob=0.0, layer_scaling=64,)
+    
+    # important! hardcode settings
+    args.epochs = 5
+    args.learning_rate = 1e-5
+    trainer.use_combined_loss = True
+
+    trainer.init(
+      net=net,
+      lr=args.learning_rate,
+      weight_decay=args.weight_decay,
+      loss_style=args.loss_style,
+    )
 
     # now execute the training
     trainer.train(

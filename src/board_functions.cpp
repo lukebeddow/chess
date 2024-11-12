@@ -4356,3 +4356,214 @@ BoardVectors FEN_move_eval_to_board_vectors(std::string fen, std::string move_st
 
     return board_vec;
 }
+
+#if defined(LUKE_PYTORCH)
+
+// void init_nn(std::string loadpath)
+// {
+//     /* initialise the pytorch neural network, given a loadpath */
+
+//     std::cout << "Preparing to load a neural network at path: " << loadpath << "\n";
+
+//     try {
+//         // Deserialize the ScriptModule from a file using torch::jit::load().
+//         chess_network = torch::jit::load(loadpath);
+//     }
+//     catch (const c10::Error& e) {
+//         std::cerr << "error loading the model\n";
+//         return;
+//     }
+
+//     std::cout << "Successfully loaded\n";
+
+//     return;
+// }
+
+int eval_board_nn(Board& board, bool white_to_play)
+{
+    static bool initialised = false;
+
+    static torch::jit::script::Module chess_network;
+
+    if (not initialised) {
+        std::string loadpath = "/home/luke/chess/python/models/traced_model.pt";
+        std::cout << "Preparing to load a neural network at path: " << loadpath << "\n";
+        chess_network = torch::jit::load(loadpath);
+        initialised = true;
+        std::cout << "Successfully loaded\n";
+    }
+
+    if (not white_to_play) {
+        set_white_plays_next(board);
+    }
+    else {
+        set_black_plays_next(board);
+    }
+
+    BoardVectors vec = board_to_vectors(board);
+
+    // now convert the board vectors into a pytorch tensor
+    torch::Tensor wP = torch::tensor(vec.wP, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor wN = torch::tensor(vec.wN, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor wB = torch::tensor(vec.wB, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor wR = torch::tensor(vec.wR, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor wQ = torch::tensor(vec.wQ, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor wK = torch::tensor(vec.wK, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor bP = torch::tensor(vec.bP, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor bN = torch::tensor(vec.bN, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor bB = torch::tensor(vec.bB, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor bR = torch::tensor(vec.bR, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor bQ = torch::tensor(vec.bQ, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor bK = torch::tensor(vec.bK, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor wKS = torch::tensor(vec.wKS, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor wQS = torch::tensor(vec.wQS, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor bKS = torch::tensor(vec.bKS, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor bQS = torch::tensor(vec.bQS, torch::kInt32).to(torch::kFloat32);
+    torch::Tensor colour = torch::tensor(vec.colour, torch::kInt32).to(torch::kFloat32);
+    // torch::Tensor total_moves(vec.total_moves);
+    // torch::Tensor no_take_ply(vec.no_take_ply);
+
+    std::vector<torch::Tensor> tensors;
+
+    tensors.push_back(wP.view({8, 8}));
+    tensors.push_back(wN.view({8, 8}));
+    tensors.push_back(wB.view({8, 8}));
+    tensors.push_back(wR.view({8, 8}));
+    tensors.push_back(wQ.view({8, 8}));
+    tensors.push_back(wK.view({8, 8}));
+    tensors.push_back(bP.view({8, 8}));
+    tensors.push_back(bN.view({8, 8}));
+    tensors.push_back(bB.view({8, 8}));
+    tensors.push_back(bR.view({8, 8}));
+    tensors.push_back(bQ.view({8, 8}));
+    tensors.push_back(bK.view({8, 8}));
+    tensors.push_back(wKS.view({8, 8}));
+    tensors.push_back(wQS.view({8, 8}));
+    tensors.push_back(bKS.view({8, 8}));
+    tensors.push_back(bQS.view({8, 8}));
+    tensors.push_back(colour.view({8, 8}));
+    // tensors.push_back(total_moves.view({8, 8}))
+    // tensors.push_back(no_take_ply.view({8, 8}))
+
+    // create the final tensor
+    torch::Tensor pre_tensor_input = torch::stack(tensors);
+    torch::Tensor tensor_input = pre_tensor_input.unsqueeze(0);
+
+    // // Print the shape of the tensor
+    // auto sizes = tensor_input.sizes();
+    // std::cout << "Tensor shape: ";
+    // for (int i = 0; i < sizes.size(); ++i) {
+    //     std::cout << sizes[i] << " ";
+    // }
+    // std::cout << std::endl;
+
+    std::vector<torch::jit::IValue> trace_input;
+    trace_input.push_back(tensor_input);
+
+    // now run it through the model
+    at::Tensor output = chess_network.forward(trace_input).toTensor();
+    torch::Tensor output_2 = output.squeeze(0);
+    float sf_eval_predication = output_2[0].item<float>();
+
+    float denorm = 7 * 2.159;
+
+    // finally, convert to our integer units (1000=1 pawn)
+    int sf_eval = (int) (sf_eval_predication * 1000 * denorm);
+
+    int my_eval = 0;
+    for (int i = 1; i <= 64; i++) {
+        float sq_prediction = output_2[i].item<float>();
+        my_eval += (int)(sq_prediction * 1000 * denorm);
+    }
+
+    // take a weighted average of each prediction
+    int final_eval = 0.5 * (sf_eval + my_eval);
+
+    final_eval = sf_eval;
+
+    return final_eval;
+}
+
+generated_moves_struct generate_moves_nn(Board& board, bool white_to_play) 
+{
+    /* This function finds the best moves to play in a given board, and returns
+    them ordered from best to worst (depending on if its white or blacks turn) */
+
+    generated_moves_struct generated_moves;
+    piece_attack_defend_struct temp_pad_struct;     // for piece analysis
+    std::vector<int> piece_view;                    // piece views
+    bool mate = false;                              // checkmate found?
+    bool next_to_play = not white_to_play;          // who plays next
+
+    /* set in the board who plays next, so hashes of the same board with a different
+    person to play next will be different in the move tree. These 'who plays next'
+    flags are not used for any other function in the entire codebase, except to save
+    who is playing next when extracting from FEN strings. In every other case, the
+    boolean 'white_to_play' is used instead, alongside the board. */
+    if (white_to_play) {
+        set_white_plays_next(board);
+    }
+    else {
+        set_black_plays_next(board);
+    }
+
+    // save the starting board
+    generated_moves.base_board = board;
+    generated_moves.white_to_play = white_to_play;
+
+    // first, get a list of all the total legal moves in the position
+    total_legal_moves_struct tlm_struct = total_legal_moves(board, white_to_play);
+    //generated_moves.base_evaluation = tlm_struct.evaluation;
+
+    // generated_moves.base_evaluation = eval_board(board, white_to_play);
+    generated_moves.base_evaluation = eval_board_nn(board, white_to_play);
+
+    // check if the game is over
+    if (tlm_struct.outcome != 0) {
+
+        // it is game over, there are no moves to find
+        generated_moves.base_evaluation = tlm_struct.evaluation;
+        generated_moves.game_continues = false;
+        return generated_moves;
+    }
+    else {
+        generated_moves.game_continues = true;
+    }
+
+    // loop through all of the legal moves
+    int loop_num = tlm_struct.legal_moves.size() / 3;
+    for (int i = 0; i < loop_num; i++) {
+
+        int start_sq = tlm_struct.legal_moves[(i * 3) + 0];
+        int dest_sq = tlm_struct.legal_moves[(i * 3) + 1];
+        int move_mod = tlm_struct.legal_moves[(i * 3) + 2];
+
+        // copy our current board, and make this move
+        Board new_board = board;
+        make_move(new_board, start_sq, dest_sq, move_mod);
+
+        // get the evaluation of this new board
+        int new_eval = eval_board_nn(new_board, not white_to_play);
+
+        // we now have the new evaluation of this board, following the move
+
+        // create a move entry
+        move_struct new_move;
+
+        // fill in the data fields for this new move
+        new_move.board = new_board;
+        new_move.start_sq = start_sq;
+        new_move.dest_sq = dest_sq;
+        new_move.move_mod = move_mod;
+        new_move.evaluation = new_eval;
+        //new_move.hash = ...
+
+        // insert the new move into the generated_moves vector
+        ordered_insert_moves(new_move, generated_moves.moves, white_to_play);
+    }
+
+    // we have now gone through every legal move
+    return generated_moves;
+}
+
+#endif

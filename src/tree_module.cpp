@@ -107,6 +107,7 @@ PYBIND11_MODULE(tree_module, m) {
         .def("set_depth", &Engine::set_depth)
         .def("generate_engine_moves_FEN", &Engine::generate_engine_moves_FEN, 
             py::arg("fen_string") = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR", py::arg("target_time") = 5)
+        .def_readwrite("use_nn_eval", &Engine::use_nn_eval)
         ;
 
     py::class_<GameBoard>(m, "GameBoard")

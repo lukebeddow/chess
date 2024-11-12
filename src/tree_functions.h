@@ -285,6 +285,8 @@ public:
     int width_;                                   // max num replies to add to each board
     int default_cpus_;                            // num cpus if threading enabled
 
+    bool use_nn_eval = false;
+
     // likely to be depreciated
     std::vector<TreeKey> old_ids_;
     std::vector<TreeKey> new_ids_;
@@ -386,6 +388,8 @@ public:
 
     float board_ms_;
     int print_level; //0=none, 1=minimum, 2=roundup, 3=layer_by_layer, 4=all
+
+    bool use_nn_eval = true;
 
     Engine();
     void set_width(int width);

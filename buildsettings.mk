@@ -10,6 +10,7 @@ PYTHON = /home/luke/pyenv/py38_general
 PYTHON_EXE = $(PYTHON)/bin/python
 PYTHON_INCLUDE = $(PYTHON)/include/python3.8
 PYBIND_PATH = /home/luke/repo/pybind11
+PYTORCH_PATH = /home/luke/repo/libtorch
 
 endif
 
@@ -25,5 +26,6 @@ PYTHON = /home/luke/pyenv/py38_general
 PYTHON_EXE = $(PYTHON)/bin/python
 PYTHON_INCLUDE = $(PYTHON)/include/python3.8
 PYBIND_PATH = /home/luke/libs/pybind11
+PYTORCH_PATH = /home/luke/repo/libtorch
 
 endif

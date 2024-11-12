@@ -17,6 +17,7 @@
 # define the targets (must compile from a .cpp file with same name in SOURCEDIR)
 TARGET_LIST_CPP := play_terminal dr_memory_build test_terminal
 TARGET_LIST_PY := board_module tree_module stockfish_module
+# TARGET_LIST_PY := torch_module
 
 # define directory structure
 SOURCEDIR := src
@@ -44,10 +45,19 @@ endif
 include buildsettings.mk
 
 # define compiler flags and libraries
-COMMON = $(DEBUG) -std=c++14 -mavx -pthread -I$(PYTHON_INCLUDE) \
+COMMON = $(DEBUG) -std=c++17 -mavx -pthread -I$(PYTHON_INCLUDE)\
 	-I$(PYBIND_PATH)/include \
 	-Wl,-rpath,'$$ORIGIN'
 PYBIND = $(COMMON) -fPIC -Wall -shared -DLUKE_PYBIND
+
+# COMMON = $(DEBUG) -std=c++17 -mavx -pthread -I$(PYTHON_INCLUDE)\
+# 	-I$(PYBIND_PATH)/include \
+# 	-I$(PYTORCH_PATH)/include \
+# 	-I$(PYTORCH_PATH)/include/torch/csrc/api/include \
+# 	-L$(PYTORCH_PATH)/lib \
+# 	-DLUKE_PYTORCH \
+# 	-Wl,-rpath,'$$ORIGIN'
+# LIBS = -ltorch -ltorch_cpu -ltorch_cuda -lc10
 
 # extra flags for make -jN => use N parallel cores
 MAKEFLAGS += -j8
@@ -107,9 +117,9 @@ $(PYTARGETOBJ): $(BUILDDIR)/%.o : $(SOURCEDIR)/%.cpp
 
 # build targets
 $(CPPTARGETS): $(OUTCPP)% : $(BUILDDIR)%.o $(CPPSHAREDOBJ)
-	g++ $(COMMON) $^ -o $@
+	g++ $(COMMON) $^ -o $@ $(LIBS) 
 $(PYTARGETS): $(OUTPY)%.so : $(BUILDDIR)%.o $(PYSHAREDOBJ)
-	g++ $(PYBIND) $^ -o $@
+	g++ $(PYBIND) $^ -o $@ $(LIBS)
 
 # if not cleaning, declare the dependencies of each object file (headers and source)
 ifneq ($(filter clean, $(MAKECMDGOALS)), clean)

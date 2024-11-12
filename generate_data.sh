@@ -6,8 +6,10 @@ SCRIPT_TRAIN=/home/luke/chess/python/train_nn_evaluator.py
 LOG_FOLDER=/home/luke/chess/logs
 
 # fen string files for data generation, must be compatible with expected format in the python script
-FILES=("ficsgamesdb_2021_standard2000_nomovetimes.txt" "ficsgamesdb_2022_standard2000_nomovetimes.txt" "ficsgamesdb_2023_standard2000_nomovetimes.txt")
-FILE_NUM=3
+# FILES=("ficsgamesdb_2021_standard2000_nomovetimes.txt" "ficsgamesdb_2022_standard2000_nomovetimes.txt" "ficsgamesdb_2023_standard2000_nomovetimes.txt")
+# FILE_NUM=3
+FILES=("ficsgamesdb_202303_blitz_nomovetimes.txt" "ficsgamesdb_202303_blitz_nomovetimes.txt")
+FILE_NUM=2
 
 # ----- helpful functions ----- #
 
@@ -101,6 +103,7 @@ do
     then
         # execute data generation command in the background
         $FAKETTY $PYTHON $SCRIPT_GEN_DATA --generate-data \
+            --job $I \
             --data-file ${FILES[$(($I % $FILE_NUM))]} \
             ${PY_ARGS[@]} \
             --num-rand $NUM_RAND \
