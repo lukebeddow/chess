@@ -1,10 +1,6 @@
 # ----- description ----- #
 
-# This Makefile compiles code which interfaces with mujoco physics simulator.
-# There are two key targets, firstly a c++ compilation and secondly a python
-# compilation. The c++ compilation results in an executable aimed at testing.
-# The python compilation results in a python module that can be imported and
-# used from within python.
+# This Makefile compiles my chess engine into c++ executables and python modules
 
 # Useful resources:
 #		https://www.gnu.org/software/make/manual/html_node/Automatic-Variables.html
@@ -45,19 +41,20 @@ endif
 include buildsettings.mk
 
 # define compiler flags and libraries
+# COMMON = $(DEBUG) -std=c++17 -mavx -pthread -I$(PYTHON_INCLUDE) \
+# 	-I$(PYBIND_PATH)/include \
+# 	-Wl,-rpath,'$$ORIGIN'
+# PYBIND = $(COMMON) -fPIC -Wall -shared -DLUKE_PYBIND
+
 COMMON = $(DEBUG) -std=c++17 -mavx -pthread -I$(PYTHON_INCLUDE)\
 	-I$(PYBIND_PATH)/include \
+	-I$(PYTORCH_PATH)/include \
+	-I$(PYTORCH_PATH)/include/torch/csrc/api/include \
+	-L$(PYTORCH_PATH)/lib \
+	-DLUKE_PYTORCH \
 	-Wl,-rpath,'$$ORIGIN'
 PYBIND = $(COMMON) -fPIC -Wall -shared -DLUKE_PYBIND
-
-# COMMON = $(DEBUG) -std=c++17 -mavx -pthread -I$(PYTHON_INCLUDE)\
-# 	-I$(PYBIND_PATH)/include \
-# 	-I$(PYTORCH_PATH)/include \
-# 	-I$(PYTORCH_PATH)/include/torch/csrc/api/include \
-# 	-L$(PYTORCH_PATH)/lib \
-# 	-DLUKE_PYTORCH \
-# 	-Wl,-rpath,'$$ORIGIN'
-# LIBS = -ltorch -ltorch_cpu -ltorch_cuda -lc10
+LIBS = -ltorch -ltorch_cpu -ltorch_cuda -lc10 -lc10_cuda
 
 # extra flags for make -jN => use N parallel cores
 MAKEFLAGS += -j8

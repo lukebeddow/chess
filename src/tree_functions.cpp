@@ -3120,12 +3120,12 @@ std::vector<MoveEntry> Engine::generate_engine_moves(Board board, bool white_to_
 
     bool game_continues;
 
-    // std::vector<int> depth_vector {2, 4, 6, 8};
-    // std::vector<int> width_vector {30, 15, 10, 5};
+    std::vector<int> depth_vector {2, 4, 6, 8};
+    std::vector<int> width_vector {30, 15, 10, 5};
     std::vector<int> prune_slack_vector {10000, 1000, 500, 250};
 
-    std::vector<int> depth_vector {1};
-    std::vector<int> width_vector {40};
+    // std::vector<int> depth_vector {1};
+    // std::vector<int> width_vector {40};
 
     // depth search with iterative deepening
     for (int i = 0; i < depth_vector.size(); i++) {

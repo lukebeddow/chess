@@ -4388,7 +4388,7 @@ int eval_board_nn(Board& board, bool white_to_play)
     if (not initialised) {
         std::string loadpath = "/home/luke/chess/python/models/traced_model.pt";
         std::cout << "Preparing to load a neural network at path: " << loadpath << "\n";
-        chess_network = torch::jit::load(loadpath);
+        chess_network = torch::jit::load(loadpath, torch::kCPU);
         initialised = true;
         std::cout << "Successfully loaded\n";
     }
@@ -4463,23 +4463,46 @@ int eval_board_nn(Board& board, bool white_to_play)
     // now run it through the model
     at::Tensor output = chess_network.forward(trace_input).toTensor();
     torch::Tensor output_2 = output.squeeze(0);
-    float sf_eval_predication = output_2[0].item<float>();
 
-    float denorm = 7 * 2.159;
+    bool use_combined_loss = false;
+    int final_eval = 0;
+    // float denorm = 7 * 2.159;
+    float denorm = 10 * 4;
 
-    // finally, convert to our integer units (1000=1 pawn)
-    int sf_eval = (int) (sf_eval_predication * 1000 * denorm);
+    if (use_combined_loss) {
 
-    int my_eval = 0;
-    for (int i = 1; i <= 64; i++) {
-        float sq_prediction = output_2[i].item<float>();
-        my_eval += (int)(sq_prediction * 1000 * denorm);
+        float sf_eval_predication = output_2[0].item<float>();
+
+        
+
+        // finally, convert to our integer units (1000=1 pawn)
+        int sf_eval = (int) (sf_eval_predication * 1000 * denorm);
+
+        int my_eval = 0;
+        for (int i = 1; i <= 64; i++) {
+            float sq_prediction = output_2[i].item<float>();
+            my_eval += (int)(sq_prediction * 1000 * denorm);
+        }
+
+        // take a weighted average of each prediction
+        final_eval = 0.5 * (sf_eval + my_eval);
+
+        final_eval = sf_eval;
+
     }
+    else {
+        // loop through output vector and sum the overall evaluation
+        int eval = 0;
+        for (int i = 0; i < 64; i++) {
+            float sq_prediction = output_2[i].item<float>();
+            eval += (int)(sq_prediction * 1000 * denorm);
+        }
 
-    // take a weighted average of each prediction
-    int final_eval = 0.5 * (sf_eval + my_eval);
+        final_eval = eval;
 
-    final_eval = sf_eval;
+        // datasetv7 error: all evals are *-1
+        final_eval = -final_eval;
+    }
 
     return final_eval;
 }

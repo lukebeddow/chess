@@ -334,6 +334,7 @@ class EvalDataset(torch.utils.data.Dataset):
           else:
             self.boards[add_ind] = self.FEN_to_torch(self.positions[i].fen_string,
                                                     self.positions[i].move_vector[j].move_letters)
+          # who is next from the PARENT position
           white_next = bf.is_white_next_FEN(self.positions[i].fen_string)
           if self.positions[i].move_vector[j].eval == "mate":
             if not white_next:
@@ -342,7 +343,7 @@ class EvalDataset(torch.utils.data.Dataset):
               self.evals[add_ind] = self.mate_value / self.stockfish_converstion
           else:
             sign = (white_next * 2) - 1
-            self.evals[add_ind] = self.positions[i].move_vector[j].eval * -sign # if white next, engine is black, so *-1, else *1
+            self.evals[add_ind] = self.positions[i].move_vector[j].eval * sign # if white next at parent, engine is white for child
           if self.convert_evals_to_pawns:
             self.evals[add_ind] *= self.stockfish_converstion
 
@@ -1051,11 +1052,13 @@ class Trainer():
       total_batches = 0
       epoch_loss = 0
 
-      # load the dataset in a series of slices
-      for slice_num, j in enumerate(self.data_dict['train_inds']):
+      # load the dataset in a series of slices (with randomised order)
+      train_load_indexes = self.data_dict['train_inds'][:]
+      random.shuffle(train_load_indexes)
+      for slice_num, j in enumerate(train_load_indexes):
 
         # load this segment of the dataset
-        data_x, data_y = self.prepare_data(self.data_dict['loadname'], j)
+        data_x, data_y, sf_evals, sq_evals = self.prepare_data(self.data_dict['loadname'], j, return_dataset=True)
 
         if examine_dist:
           import matplotlib.pyplot as plt
@@ -1080,13 +1083,65 @@ class Trainer():
         if slice_num % self.slice_log_rate == 0:
           print(f"Epoch {i + 1}. Slice {slice_num + 1} / {len(self.data_dict['train_inds'])} has {num_batches} batches.", end=" ", flush=True)
 
+        # WEIGHTED SAMPLING PREP -----
+        [sf_bin_counts, my_raw_bin_counts, my_sum_bin_counts] = trainer.dataloader.load("distribution", suffix_numbering=False)
+        num_bins = 50
+        bin_clip = 15
+        combine_bins = 10
+        bin_width = (2 * bin_clip) / num_bins
+
+        clip_val = bin_clip - combine_bins * bin_width
+        sf_evals = torch.clip(sf_evals, -clip_val, clip_val)
+
+        if combine_bins > 1:
+          # Pool the first `combine_bins` bins and the last `combine_bins` bins
+          pooled_start = np.sum(sf_bin_counts[:combine_bins])
+          pooled_end = np.sum(sf_bin_counts[num_bins - combine_bins:])
+          
+          # Combine bins (excluding the first and last ones) and add the pooled values at both ends
+          bin_counts = torch.tensor(np.concatenate([
+              [pooled_start],  # Combined first `combine_bins` bins
+              sf_bin_counts[combine_bins:num_bins - combine_bins],  # The middle bins
+              [pooled_end]     # Combined last `combine_bins` bins
+          ]))
+        else:
+          bin_counts = torch.tensor(sf_bin_counts)
+
+        bin_probs = bin_counts / torch.sum(bin_counts)
+
+        # convert to inverse normalised probability
+        bin_probs = 1.0 / bin_probs
+        bin_probs /= torch.sum(bin_probs)
+
+        sf_evals += clip_val + 1e-6 # make all positive
+        sf_evals /= bin_width # scale so bins have integer width
+        
+        inds = torch.floor(sf_evals).long() # conver bins into indexes -> 1.74 -> bin[1]
+        # inds = torch.clip(inds, 0, len(bin_probs) - 1)
+        # inds += 1
+
+        # index each probability bin and assign that prob as the weight
+        weight_vec = bin_probs[inds]
+
+        # create the sampler for this batch
+        weighted_sampler = torch.utils.data.WeightedRandomSampler(weights=weight_vec, num_samples=batch_size, replacement=True)
+        # END WEIGHTED SAMPLING PREP ----
+        
         t1 = time.time()
 
         # iterate through each batch for this slice of the dataset
         for n in range(num_batches):
 
-          batch_x = data_x[rand_idx[n * batch_size : (n+1) * batch_size]]
-          batch_y = data_y[rand_idx[n * batch_size : (n+1) * batch_size]]
+          # take a random sample for this batch
+          sample_style = "weighted"
+          if sample_style == "default":
+            batch_x = data_x[rand_idx[n * batch_size : (n+1) * batch_size]]
+            batch_y = data_y[rand_idx[n * batch_size : (n+1) * batch_size]]
+          elif sample_style == "weighted":
+            w_sample_indicies = list(weighted_sampler)
+            batch_x = data_x[w_sample_indicies]
+            batch_y = data_y[w_sample_indicies]
+            
 
           # go to device (small memory footprint, slightly slower)
           batch_x = batch_x.to(device)
