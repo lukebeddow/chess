@@ -895,6 +895,11 @@ class Trainer():
     checkmate_value: float = 15           # value to clip all evaluations between
     sample_method: str = "default"        # how to sample batches, either default or weighted (for even representation)
 
+    # normalising factors
+    norm_mean: float = 0
+    norm_std: float = 0
+    norm_clip: float = 0
+
     def update(self, newdict):
       for key, value in newdict.items():
         if hasattr(self, key):
@@ -913,6 +918,7 @@ class Trainer():
     self.slice_log_rate = 5
     self.test_report_name = "test_report"
     self.test_report_seperator = "---\n"
+    self.weighted_sample_num_combined_bins = 20
 
     # prepare saving and loading, extract info from data_dict
     self.data_dict = data_dict
@@ -921,8 +927,10 @@ class Trainer():
     savepath = f"{data_dict['path']}/{data_dict['savepath']}/{data_dict['savefolder']}"
     self.datasaver = ModelSaver(savepath, log_level=data_dict['save_log_level'])
     self.params.sample_method = data_dict["sample_method"]
+    self.characterise_distribution() # extract mean/std dev/distirbution of dataset
 
     # create variables
+    self.net = None
     self.batch_limit = None
     self.program = None
     self.param_1 = None
@@ -966,19 +974,26 @@ class Trainer():
     """
     Normalise data based on [max, mean, std]
     """
-    max, mean, std = self.norm_factors[:3]
-    d = ((data - mean) / std) / max
-    if len(self.norm_factors) > 3:
-      clip = self.norm_factors[3]
-      d = torch.clip(d, min=-clip, max=clip)
-    return d
+
+    clip = self.params.norm_clip
+    mean = self.params.norm_mean
+    std = self.params.norm_std
+
+    data = torch.clip(data, min=-clip, max=clip)
+    data = ((data - mean) / std)
+
+    return data
 
   def denormalise_data(self, data):
     """
     Undo normalisation based on [max, mean, std]
     """
-    max, mean, std = self.norm_factors[:3]
-    return (data * max * std) + mean
+
+    clip = self.params.norm_clip
+    mean = self.params.norm_mean
+    std = self.params.norm_std
+
+    return (data * std) + mean
 
   def calc_loss(self, net_y, true_y):
     """
@@ -1010,23 +1025,45 @@ class Trainer():
 
     return loss
   
-  def create_weighted_sampler(self, evaluations):
+  def characterise_distribution(self):
+    """
+    Load data on the distribution
+    """
+
+    # load the dataset distribution
+    dist = self.dataloader.load("distribution", suffix_numbering=False)
+    self.bin_counts = dist[0]
+    self.bin_ranges = dist[1]
+    self.mean_std_max = dist[2]
+
+    if self.params.use_sf_eval:
+      self.params.norm_mean = self.mean_std_max[0][0]
+      self.params.norm_std = self.mean_std_max[0][1]
+      self.params.norm_clip = self.params.checkmate_value
+    elif self.params.use_combined_loss:
+      self.params.norm_mean = self.mean_std_max[2][0]
+      self.params.norm_std = self.mean_std_max[2][1]
+      self.params.norm_clip = self.params.checkmate_value
+    else:
+      raise RuntimeError("Trainer.characterise_distribution() error: currently requires params.use_sf_eval or params.use_combined_loss to be true")
+
+  def create_weighted_sampler(self, evaluations, combine_bins=20):
     """
     Create a weighted sampler based on the current distribution of evaluations
     """
 
-    # load the distribution data for this dataset
-    [sf_bin_counts, my_raw_bin_counts, my_sum_bin_counts] = trainer.dataloader.load("distribution", suffix_numbering=False)
+    # hyperparameter, how many bins (/100) to pool on either side of the distribution (recommended: 20)
+    combine_bins = self.weighted_sample_num_combined_bins
 
     if self.params.use_sf_eval:
-      raw_bin_counts = sf_bin_counts
+      raw_bin_counts = self.bin_counts[0]
+      raw_bins = self.bin_ranges[0]
     else:
       raise RuntimeError("Trainer.create_weighted_sampler() error: weighted sampling has not been implemented unless self.params.use_sf_eval = True")
 
     # compute the number of bins we will use for the weighting
     num_bins = len(raw_bin_counts) + 1
-    bin_clip = 15
-    combine_bins = 10
+    bin_clip = np.max(raw_bins)
     bin_width = (2 * bin_clip) / num_bins
 
     clip_val = bin_clip - combine_bins * bin_width
@@ -1095,13 +1132,15 @@ class Trainer():
     else:
       return data_x, data_y
 
-  def train(self, epochs, norm_factors,
+  def train(self, net=None, epochs=None, norm_factors=None,
             device="cuda", batch_size=None,
             examine_dist=False):
     """
     Perform a training epoch for a given network based on data inputs
     data_x, and correct outputs data_y
     """
+
+    if net is not None: self.init(net)
 
     if epochs is not None: self.params.num_epochs = epochs
 
@@ -1582,8 +1621,8 @@ if __name__ == "__main__":
   parser.add_argument("--double-train", action="store_true")              # train on stockfish evaluations afterwards
   parser.add_argument("--use-sf-loss", action="store_true")               # use stockfish evaluation as target
   parser.add_argument("--dataset-name", default=None)                     # name of training dataset to use
-  parser.add_argument("--train-num", type=int, default=140)               # number of data files to use for training
-  parser.add_argument("--test-num", type=int, default=4)                  # number of data files to use for testing
+  parser.add_argument("--train-num", type=int, default=160)               # number of data files to use for training
+  parser.add_argument("--test-num", type=int, default=7)                  # number of data files to use for testing
   parser.add_argument("--batch-limit", type=int, default=0)               # limit batches per file, useful for debugging
   parser.add_argument("--slice-log-rate", type=int, default=5)            # log rate for slices during an epoch
   parser.add_argument("--print-table", action="store_true")               # are we printing a results table
@@ -1601,7 +1640,7 @@ if __name__ == "__main__":
   data_dict = {
     "path" : "/home/luke/chess",
     "loadpath" : "/python/datasets",
-    "loadfolder" : "datasetv7" if args.dataset_name is None else args.dataset_name,
+    "loadfolder" : "datasetv8" if args.dataset_name is None else args.dataset_name,
     "loadname" : "data_torch",
     "savepath" : "/python/models",
     "savefolder" : f"{group_name}/{run_name}",
@@ -1631,7 +1670,7 @@ if __name__ == "__main__":
   trainer.program = args.program
   trainer.slice_log_rate = args.slice_log_rate
   trainer.params.use_sf_eval = args.use_sf_loss
-  trainer.params.use_sq_eval_sum_loss = True
+  trainer.params.use_sq_eval_sum_loss = False
   default_norm_factors = [7, 0, 2.159] # old
   default_norm_factors = [10, 0, 4] # new, for datasetv7
 
@@ -1857,6 +1896,39 @@ if __name__ == "__main__":
       norm_factors=default_norm_factors,
       device=args.device
     )
+
+    print_time_taken()
+
+  elif args.program == "compare_learning":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 2, 3]
+    vary_2 = [1e-7, 1e-6, 1e-5]
+    vary_3 = None
+    repeats = None
+    trainer.param_1_name = "num layers"
+    trainer.param_2_name = "learning rate"
+    trainer.param_3_name = None
+    trainer.param_1, trainer.param_2, trainer.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    print(trainer.create_test_report())
+    
+    # create and initialise the network
+    in_features = 17
+    out_features = 64
+    net = FCChessNet(in_features, out_features, num_blocks=trainer.param_1, 
+                    dropout_prob=0.0, layer_scaling=64,
+                    block_type="simple")
+    
+    # apply training settings
+    trainer.params.use_sf_eval = True
+    trainer.params.num_epochs = 10
+    trainer.params.loss_style = "l1"
+    trainer.params.learning_rate = trainer.param_2
+    trainer.params.sample_method = "weighted"
+
+    # now execute the training
+    trainer.train(net=net, device=args.device)
 
     print_time_taken()
 
