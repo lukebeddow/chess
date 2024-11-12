@@ -4,7 +4,7 @@ import modules.stockfish_module as sf
 from ModelSaver import ModelSaver
 import os
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from collections import namedtuple
 import itertools
 import time
@@ -477,7 +477,6 @@ class EvalDataset(torch.utils.data.Dataset):
 
     return num_mates
 
-
 class ResidualBlock(nn.Module):
 
   def __init__(self, in_channels, out_channels, stride = 1, downsample = None):
@@ -876,16 +875,25 @@ class Trainer():
 
   @dataclass
   class Parameters:
+
+    # training parameters
     num_epochs: int = 5
     
+    # key learning hyperparameters
     learning_rate: float = 1e-5
     weight_decay: float = 1e-4
     loss_style: str = 'MSE'
     batch_size: int = 64
     dropout_prob: float = 0.0
 
-    use_combined_loss: bool = False
-    use_sf_eval: bool = False
+    # specific learning options
+    use_combined_loss: bool = False       # combine stockfish and my eval in loss term
+    use_sf_eval: bool = True              # use stockfish evaluations to train, rather than my evaluations
+    use_sq_eval_sum_loss: bool = False    # if using my eval, include the sum in the loss term (i.e. overall eval)
+
+    # important dataset management options
+    checkmate_value: float = 15           # value to clip all evaluations between
+    sample_method: str = "default"        # how to sample batches, either default or weighted (for even representation)
 
     def update(self, newdict):
       for key, value in newdict.items():
@@ -898,22 +906,21 @@ class Trainer():
     Initialise the trainer
     """
 
+    self.params = Trainer.Parameters()
+
     # settings
     self.log_level = log_level
     self.slice_log_rate = 5
-    self.checkmate_value = 15 # clip checkmates to this value
-    self.use_sf_eval = False
-    self.use_sq_eval_sum_loss = True
-    self.use_combined_loss = False
     self.test_report_name = "test_report"
     self.test_report_seperator = "---\n"
 
-    # prepare saving and loading
+    # prepare saving and loading, extract info from data_dict
     self.data_dict = data_dict
     loadpath = f"{data_dict['path']}/{data_dict['loadpath']}/{data_dict['loadfolder']}"
     self.dataloader = ModelSaver(loadpath, log_level=data_dict['load_log_level'])
     savepath = f"{data_dict['path']}/{data_dict['savepath']}/{data_dict['savefolder']}"
     self.datasaver = ModelSaver(savepath, log_level=data_dict['save_log_level'])
+    self.params.sample_method = data_dict["sample_method"]
 
     # create variables
     self.batch_limit = None
@@ -932,23 +939,28 @@ class Trainer():
     self.test_mean_sf_diff = []
     self.test_std_sf_diff = []
 
-  def init(self, net, lr=1e-5, weight_decay=1e-4, loss_style="MSE"):
+  def init(self, net, lr=None, weight_decay=None, loss_style=None):
     """
     Initialise the network
     """
 
+    if lr is not None: self.params.learning_rate = lr
+    if weight_decay is not None: self.params.weight_decay = weight_decay
+    if loss_style is not None: self.params.loss_style = loss_style
+
     # input critical learning features
     self.net = net
-    self.optim = torch.optim.Adam(net.parameters(), lr=lr, weight_decay=weight_decay)
+    self.optim = torch.optim.Adam(net.parameters(), lr=self.params.learning_rate, 
+                                  weight_decay=self.params.weight_decay)
 
-    if loss_style.lower() == "mse":
+    if self.params.loss_style.lower() == "mse":
       self.lossfcn = nn.MSELoss()
-    elif loss_style.lower() == "l1":
+    elif self.params.loss_style.lower() == "l1":
       self.lossfcn = nn.L1Loss()
-    elif loss_style.lower() == "huber":
+    elif self.params.loss_style.lower() == "huber":
       self.lossfcn = nn.HuberLoss()
     else:
-      raise RuntimeError(f"train_procedure() error: loss_style = {loss_style} not recognised")
+      raise RuntimeError(f"train_procedure() error: loss_style = {self.params.loss_style} not recognised")
 
   def normalise_data(self, data):
     """
@@ -973,7 +985,7 @@ class Trainer():
     Calculate the loss
     """
 
-    if self.use_combined_loss:
+    if self.params.use_combined_loss:
 
       # take the first element in each vector across the whole batch
       loss_board_eval = self.lossfcn(net_y[:, 0], true_y[:, 0])
@@ -983,7 +995,7 @@ class Trainer():
 
       loss = loss_board_eval + loss_square_eval
 
-    elif self.use_sf_eval:
+    elif self.params.use_sf_eval:
 
       loss = self.lossfcn(torch.sum(net_y, dim=1), true_y)
 
@@ -991,13 +1003,68 @@ class Trainer():
 
       loss = self.lossfcn(net_y.squeeze(1), true_y)
 
-      if self.use_sq_eval_sum_loss:
+      if self.params.use_sq_eval_sum_loss:
 
         # constrain also the sum (using MSE error)
         loss += torch.pow(torch.sum(net_y, dim=1) - torch.sum(true_y, dim=1), 2).mean()
 
     return loss
   
+  def create_weighted_sampler(self, evaluations):
+    """
+    Create a weighted sampler based on the current distribution of evaluations
+    """
+
+    # load the distribution data for this dataset
+    [sf_bin_counts, my_raw_bin_counts, my_sum_bin_counts] = trainer.dataloader.load("distribution", suffix_numbering=False)
+
+    if self.params.use_sf_eval:
+      raw_bin_counts = sf_bin_counts
+    else:
+      raise RuntimeError("Trainer.create_weighted_sampler() error: weighted sampling has not been implemented unless self.params.use_sf_eval = True")
+
+    # compute the number of bins we will use for the weighting
+    num_bins = len(raw_bin_counts) + 1
+    bin_clip = 15
+    combine_bins = 10
+    bin_width = (2 * bin_clip) / num_bins
+
+    clip_val = bin_clip - combine_bins * bin_width
+    evaluations = torch.clip(evaluations, -clip_val, clip_val)
+
+    # check if we pool at either side of bins, to avoid excessive sampling of rare values
+    if combine_bins > 1:
+      bin_counts = torch.tensor(np.concatenate([
+          [np.sum(raw_bin_counts[:combine_bins])],
+          raw_bin_counts[combine_bins:num_bins - combine_bins],
+          [np.sum(raw_bin_counts[num_bins - combine_bins:])] 
+      ]))
+    else:
+      bin_counts = torch.tensor(raw_bin_counts)
+
+    # convert to inverse normalised probability
+    bin_probs = bin_counts / torch.sum(bin_counts)
+    bin_probs = 1.0 / bin_probs
+    bin_probs /= torch.sum(bin_probs)
+
+    evaluations += clip_val + 1e-6 # make all positive
+    evaluations /= bin_width # scale so bins have integer width
+    inds = torch.floor(evaluations).long() # conver bins into indexes -> 1.74 -> bin[1]
+
+    # neither of below should be needed if above is correct
+    # inds = torch.clip(inds, 0, len(bin_probs) - 1)
+    # inds += 1
+
+    # index each probability bin and assign that prob as the weight
+    weight_vec = bin_probs[inds]
+
+    # create the sampler for this batch
+    weighted_sampler = torch.utils.data.WeightedRandomSampler(weights=weight_vec, 
+                                                              num_samples=self.params.batch_size, 
+                                                              replacement=True)
+    
+    return weighted_sampler
+
   def prepare_data(self, name, id, to_device=None, return_dataset=False):
     """
     Load and process the data
@@ -1006,15 +1073,15 @@ class Trainer():
     # load this segment of the dataset
     dataset = self.dataloader.load(name, id=id)
     data_x = dataset[0]
-    if self.use_combined_loss:
+    if self.params.use_combined_loss:
       data_y = torch.cat((dataset[1].unsqueeze(1), dataset[2]), dim=1)
-    elif self.use_sf_eval:
+    elif self.params.use_sf_eval:
       data_y = dataset[1]
     else:
       data_y = dataset[2]
 
     # clip checkmates
-    data_y = torch.clip(data_y, -self.checkmate_value, self.checkmate_value)
+    data_y = torch.clip(data_y, -self.params.checkmate_value, self.params.checkmate_value)
 
     # normalise y labels
     data_y = self.normalise_data(data_y)
@@ -1029,12 +1096,19 @@ class Trainer():
       return data_x, data_y
 
   def train(self, epochs, norm_factors,
-            device="cuda", batch_size=64,
+            device="cuda", batch_size=None,
             examine_dist=False):
     """
     Perform a training epoch for a given network based on data inputs
     data_x, and correct outputs data_y
     """
+
+    if epochs is not None: self.params.num_epochs = epochs
+
+    # save and print the current training hyperparameters
+    hyperparam_str = self.save_hyperparameters()
+    if self.log_level > 0:
+      print(hyperparam_str)
 
     # move onto the specified device
     self.net.to(device)
@@ -1042,13 +1116,14 @@ class Trainer():
     # put the model in training mode
     self.net.train()
 
-    # save the normalisation factors
+    # save the input settings
     self.norm_factors = norm_factors
+    if batch_size is not None: self.params.batch_size = batch_size
     
     # each epoch, cover the entire training dataset
-    for i in range(epochs):
+    for i in range(self.params.num_epochs):
 
-      print(f"Starting epoch {i + 1} / {epochs}.", flush=True)
+      print(f"Starting epoch {i + 1} / {self.params.num_epochs}.", flush=True)
       total_batches = 0
       epoch_loss = 0
 
@@ -1068,7 +1143,7 @@ class Trainer():
           inspect_data(data_y)
           continue
 
-        num_batches = len(data_x) // batch_size
+        num_batches = len(data_x) // self.params.batch_size
         if num_batches == 0:
           raise RuntimeError("Trainer.train() found num_batches = 0")
         
@@ -1083,49 +1158,10 @@ class Trainer():
         if slice_num % self.slice_log_rate == 0:
           print(f"Epoch {i + 1}. Slice {slice_num + 1} / {len(self.data_dict['train_inds'])} has {num_batches} batches.", end=" ", flush=True)
 
-        # WEIGHTED SAMPLING PREP -----
-        [sf_bin_counts, my_raw_bin_counts, my_sum_bin_counts] = trainer.dataloader.load("distribution", suffix_numbering=False)
-        num_bins = 50
-        bin_clip = 15
-        combine_bins = 10
-        bin_width = (2 * bin_clip) / num_bins
-
-        clip_val = bin_clip - combine_bins * bin_width
-        sf_evals = torch.clip(sf_evals, -clip_val, clip_val)
-
-        if combine_bins > 1:
-          # Pool the first `combine_bins` bins and the last `combine_bins` bins
-          pooled_start = np.sum(sf_bin_counts[:combine_bins])
-          pooled_end = np.sum(sf_bin_counts[num_bins - combine_bins:])
-          
-          # Combine bins (excluding the first and last ones) and add the pooled values at both ends
-          bin_counts = torch.tensor(np.concatenate([
-              [pooled_start],  # Combined first `combine_bins` bins
-              sf_bin_counts[combine_bins:num_bins - combine_bins],  # The middle bins
-              [pooled_end]     # Combined last `combine_bins` bins
-          ]))
+        if self.params.use_sf_eval:
+          weighted_sampler = self.create_weighted_sampler(sf_evals)
         else:
-          bin_counts = torch.tensor(sf_bin_counts)
-
-        bin_probs = bin_counts / torch.sum(bin_counts)
-
-        # convert to inverse normalised probability
-        bin_probs = 1.0 / bin_probs
-        bin_probs /= torch.sum(bin_probs)
-
-        sf_evals += clip_val + 1e-6 # make all positive
-        sf_evals /= bin_width # scale so bins have integer width
-        
-        inds = torch.floor(sf_evals).long() # conver bins into indexes -> 1.74 -> bin[1]
-        # inds = torch.clip(inds, 0, len(bin_probs) - 1)
-        # inds += 1
-
-        # index each probability bin and assign that prob as the weight
-        weight_vec = bin_probs[inds]
-
-        # create the sampler for this batch
-        weighted_sampler = torch.utils.data.WeightedRandomSampler(weights=weight_vec, num_samples=batch_size, replacement=True)
-        # END WEIGHTED SAMPLING PREP ----
+          weighted_sampler = self.create_weighted_sampler(sq_evals)
         
         t1 = time.time()
 
@@ -1133,16 +1169,16 @@ class Trainer():
         for n in range(num_batches):
 
           # take a random sample for this batch
-          sample_style = "weighted"
-          if sample_style == "default":
-            batch_x = data_x[rand_idx[n * batch_size : (n+1) * batch_size]]
-            batch_y = data_y[rand_idx[n * batch_size : (n+1) * batch_size]]
-          elif sample_style == "weighted":
+          if self.params.sample_method == "default":
+            batch_x = data_x[rand_idx[n * self.params.batch_size : (n+1) * self.params.batch_size]]
+            batch_y = data_y[rand_idx[n * self.params.batch_size : (n+1) * self.params.batch_size]]
+          elif self.params.sample_method == "weighted":
             w_sample_indicies = list(weighted_sampler)
             batch_x = data_x[w_sample_indicies]
             batch_y = data_y[w_sample_indicies]
+          else:
+            raise RuntimeError(f"Trainer.train() error: sampling method '{self.params.sample_method}' not recognised")
             
-
           # go to device (small memory footprint, slightly slower)
           batch_x = batch_x.to(device)
           batch_y = batch_y.to(device)
@@ -1180,7 +1216,7 @@ class Trainer():
       
       # evaluate model performance
       self.train_loss.append(epoch_loss)
-      test_report = self.test(epoch=i+1, device=device, batch_size=batch_size)
+      test_report = self.test(epoch=i+1, device=device)
 
       # print the test report
       print(test_report)
@@ -1196,7 +1232,7 @@ class Trainer():
     # finally, return the network that we have trained
     return self.net
   
-  def test(self, epoch, device, batch_size=64):
+  def test(self, epoch, device):
     """
     Perform a training epoch for a given network based on data inputs
     data_x, and correct outputs data_y
@@ -1228,7 +1264,7 @@ class Trainer():
       data_x, data_y, dataset_1, dataset_2 = self.prepare_data(self.data_dict['loadname'], j,
                                                                return_dataset=True)
 
-      num_batches = len(data_x) // batch_size
+      num_batches = len(data_x) // self.params.batch_size
       if num_batches == 0:
         raise RuntimeError("Trainer.test() found num_batches = 0")
       
@@ -1249,21 +1285,34 @@ class Trainer():
       if slice_num % self.slice_log_rate == 0:
         print(f"Testing. Slice {slice_num + 1} / {len(self.data_dict['test_inds'])} has {num_batches} batches.", end=" ", flush=True)
 
+      if self.params.use_sf_eval:
+        weighted_sampler = self.create_weighted_sampler(dataset_1)
+      else:
+        weighted_sampler = self.create_weighted_sampler(dataset_2)
+
       t1 = time.time()
 
       # iterate through each batch for this slice of the dataset
       for n in range(num_batches):
 
-        batch_x = data_x[rand_idx[n * batch_size : (n+1) * batch_size]]
-        batch_y = data_y[rand_idx[n * batch_size : (n+1) * batch_size]]
+        # take a random sample for this batch
+        if self.params.sample_method == "default":
+          batch_x = data_x[rand_idx[n * self.params.batch_size : (n+1) * self.params.batch_size]]
+          batch_y = data_y[rand_idx[n * self.params.batch_size : (n+1) * self.params.batch_size]]
+        elif self.params.sample_method == "weighted":
+          w_sample_indicies = list(weighted_sampler)
+          batch_x = data_x[w_sample_indicies]
+          batch_y = data_y[w_sample_indicies]
+        else:
+          raise RuntimeError(f"Trainer.train() error: sampling method '{self.params.sample_method}' not recognised")
 
         # go to device
         batch_x = batch_x.to(device)
         batch_y = batch_y.to(device)
 
         # extract the evaluations from stockfish (sf) and my evaluation function (my)
-        sf_evals = dataset_1[rand_idx[n * batch_size : (n+1) * batch_size]].to(device)
-        my_evals = torch.sum(dataset_2[rand_idx[n * batch_size : (n+1) * batch_size]], dim=1).to(device)
+        sf_evals = dataset_1[rand_idx[n * self.params.batch_size : (n+1) * self.params.batch_size]].to(device)
+        my_evals = torch.sum(dataset_2[rand_idx[n * self.params.batch_size : (n+1) * self.params.batch_size]], dim=1).to(device)
 
         with torch.no_grad():
 
@@ -1277,7 +1326,7 @@ class Trainer():
         net_y_denorm = self.denormalise_data(net_y)
 
         # examine performance relative to stockfish evaluation function
-        if self.use_combined_loss:
+        if self.params.use_combined_loss:
           net_sf_eval = net_y_denorm[:, 0]
           net_my_evals = torch.sum(net_y_denorm[:, 1:], dim=1)
           sf_diff = torch.abs(net_sf_eval - sf_evals)
@@ -1364,8 +1413,20 @@ class Trainer():
     """
     Save a text file detailing the key hyperparameters used for training
     """
+
+    savestr = """Hyperparemters:\n\n"""
+
+    param_dict = asdict(self.params)
+    param_dict.update({
+      "dataset_name" : self.data_dict["loadfolder"],
+      "save_folder" : self.data_dict["savefolder"],
+    })
     
-    pass
+    savestr += str(param_dict).replace(",", "\n") + "\n"
+
+    self.datasaver.save("hyperparemeters", txtstr=savestr, txtonly=True)
+
+    return savestr
 
   def create_test_report(self):
     """
@@ -1548,6 +1609,7 @@ if __name__ == "__main__":
     "train_inds" : list(range(1, args.train_num + 1)),
     "test_inds" : list(range(args.train_num + 1, 
                              args.train_num + args.test_num + 1)),
+    "sample_method" : "weighted",
     "load_log_level" : 0,
     "save_log_level" : 1,
   }
@@ -1568,10 +1630,10 @@ if __name__ == "__main__":
   # apply generic settings
   trainer.program = args.program
   trainer.slice_log_rate = args.slice_log_rate
-  trainer.use_sf_eval = args.use_sf_loss
-  trainer.use_sq_eval_sum_loss = True
-  default_norm_factors = [7, 0, 2.159]
-  default_norm_factors = [10, 0, 4]
+  trainer.params.use_sf_eval = args.use_sf_loss
+  trainer.params.use_sq_eval_sum_loss = True
+  default_norm_factors = [7, 0, 2.159] # old
+  default_norm_factors = [10, 0, 4] # new, for datasetv7
 
   # apply generic command line settings
   if args.batch_limit > 0:
@@ -1642,9 +1704,9 @@ if __name__ == "__main__":
     )
 
     # are we training on sf evaluations straight away
-    trainer.use_sf_eval = not trainer.param_1
+    trainer.params.use_sf_eval = not trainer.param_1
 
-    print(f"trainer.use_sf_eval = {trainer.use_sf_eval}")
+    print(f"trainer.params.use_sf_eval = {trainer.params.use_sf_eval}")
     print(f"Loss style is {args.loss_style}")
     print(f"Learning rate is {args.learning_rate}")
 
@@ -1663,7 +1725,7 @@ if __name__ == "__main__":
       print("\n--- Now starting double training ---\n")
 
       # now train to match the stockfish evaluations
-      trainer.use_sf_eval = True
+      trainer.params.use_sf_eval = True
 
       trainer.train(
         epochs=args.epochs,
@@ -1701,7 +1763,7 @@ if __name__ == "__main__":
 
     # important! hardcode settings
     args.epochs = 5
-    trainer.use_sf_eval = trainer.param_2
+    trainer.params.use_sf_eval = trainer.param_2
 
     # now execute the training
     trainer.train(
@@ -1742,7 +1804,7 @@ if __name__ == "__main__":
     # important! hardcode settings
     args.epochs = 5
     args.learning_rate = 1e-5
-    trainer.use_sf_eval = True
+    trainer.params.use_sf_eval = True
 
     # now execute the training
     trainer.train(
