@@ -52,7 +52,7 @@ do
   case ${!i} in
     # with arguments, increment i
     -j | --jobs ) (( i++ )); jobs=$(parseJobs ${!i}); echo jobs are $jobs ;;
-    -t | --timestamp ) (( i++ )); timestamp=${!i}; echo Timestamp set to $timestamp ;;
+    -t | --timestamp ) (( i++ )); TIMESTAMP=${!i}; echo Timestamp set to $TIMESTAMP ;;
     -s | --stagger ) (( i++ )); STAGGER=${!i}; echo stagger is $STAGGER ;;
     -n | --num-rand ) (( i++ )); NUM_RAND=${!i}; echo num_rand is $NUM_RAND ;;
     # without arguments

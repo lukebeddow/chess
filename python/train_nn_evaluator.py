@@ -824,21 +824,21 @@ def print_table(data_dict, timestamp):
 
     # now assemble this row of the table
     data_row = [timestamp, j]
-    if trainer.param_1 is not None: data_row.append(trainer.param_1)
-    if trainer.param_2 is not None: data_row.append(trainer.param_2)
-    if trainer.param_3 is not None: data_row.append(trainer.param_3)
+    if trainer.track.param_1 is not None: data_row.append(trainer.track.param_1)
+    if trainer.track.param_2 is not None: data_row.append(trainer.track.param_2)
+    if trainer.track.param_3 is not None: data_row.append(trainer.track.param_3)
     for d in data_list: data_row.append(d)
     table.append(data_row)
 
   # assemble the table column headings
   headings = ["Timestamp     ", "Job"]
-  if trainer.param_1 is not None: headings.append(trainer.param_1_name)
-  if trainer.param_2 is not None: headings.append(trainer.param_2_name)
-  if trainer.param_3 is not None: headings.append(trainer.param_3_name)
+  if trainer.track.param_1 is not None: headings.append(trainer.track.param_1_name)
+  if trainer.track.param_2 is not None: headings.append(trainer.track.param_2_name)
+  if trainer.track.param_3 is not None: headings.append(trainer.track.param_3_name)
   for n in names: headings.append(n)
 
   # fix later
-  program_str = f"Program = {trainer.program}\n\n"
+  program_str = f"Program = {trainer.track.program}\n\n"
 
   # now prepare to print the table
   print_str = """""" + program_str
@@ -906,16 +906,209 @@ class Trainer():
           setattr(self, key, value)
         else: raise RuntimeError(f"incorrect key: {key}")
 
-  def __init__(self, data_dict, log_level=1):
+  class Tracker:
+
+    def __init__(self, name="training_run"):
+      """
+      Class which tracks training key details and results
+      """
+      # user defined variables
+      self.test_report_seperator = "---\n"
+
+      # training information
+      self.name = name
+      self.program = None
+      self.param_1 = None
+      self.param_2 = None
+      self.param_3 = None
+      self.param_1_name = None
+      self.param_2_name = None
+      self.param_3_name = None
+
+      # names of data fields
+      self.names = [
+        "Epochs",
+        "Train Loss / e-3",
+        "Test Loss / e-3",
+        "SF mean",
+        "SF std",
+        "My mean",
+        "My std"
+      ]
+
+      # data during training
+      self.train_loss = []
+      self.test_loss = []
+      self.test_epochs = []
+      self.test_mean_my_diff = []
+      self.test_std_my_diff = []
+      self.test_mean_sf_diff = []
+      self.test_std_sf_diff = []
+
+    def get_data(self):
+      """
+      Return the data in one matrix
+      """
+
+      data = np.stack((
+        self.test_epochs,
+        self.train_loss,
+        self.test_loss,
+        self.test_mean_sf_diff,
+        self.test_std_sf_diff,
+        self.test_mean_my_diff,
+        self.test_std_my_diff,
+      )).transpose()
+
+      return data
+
+    def create_test_report(self):
+      """
+      Create a test report given training tracker data  
+      """
+
+      report_str = """"""
+
+      report_str += f"Report for {self.name}\n"
+      if self.program is not None: report_str += f"Program = {self.program}\n"
+
+      if self.param_1 is not None:
+        report_str += self.test_report_seperator
+        if self.param_1 is not None: report_str += f"Param 1 name = {self.param_1_name}, value = {self.param_1}\n"
+        if self.param_2 is not None: report_str += f"Param 2 name = {self.param_2_name}, value = {self.param_2}\n"
+        if self.param_3 is not None: report_str += f"Param 3 name = {self.param_3_name}, value = {self.param_3}\n"
+
+      if len(self.test_epochs) > 0:
+        report_str += self.test_report_seperator
+
+        header_str = "{0:<6} | {1:<16} | {2:<16} | {3:<7} | {4:<7} | {5:<7} | {6:<7}".format(*self.names)
+        row_str = "{0:<6} | {1:<16.3f} | {2:<16.3f} | {3:<7.3f} | {4:<7.3f} | {5:<7.3f} | {6:<7.3f}"
+
+        report_str += header_str + "\n"
+
+        for i, e in enumerate(self.test_epochs):
+
+          report_str += row_str.format(
+            e,
+            self.train_loss[i],
+            self.test_loss[i],
+            self.test_mean_sf_diff[i],
+            self.test_std_sf_diff[i],
+            self.test_mean_my_diff[i],
+            self.test_std_my_diff[i]
+          ) + "\n"
+
+      return report_str
+    
+    def load_test_report(self, test_report_text):
+      """
+      Load tracker from text data, given the split of sections. So first load the
+      text file
+      """
+
+      sections_split = test_report_text.split(self.test_report_seperator)
+
+      found_meta = False
+      found_param = False
+      found_data = False
+      for i, s in enumerate(sections_split):
+        if s.startswith("Report"):
+          meta_data = s
+          found_meta = True
+        elif s.startswith("Param"):
+          param_data = s
+          found_param = True
+        elif s.startswith("Epoch"):
+          test_data = s
+          found_data = True
+
+      if found_meta:
+        lines = meta_data.splitlines()
+        for l in lines:
+          if l.startswith("Program"):
+            self.program = l.split(" = ")[1]
+
+      if found_param:
+        """example of string we should have:
+        ---
+        Param 1 name = learning rate, value = 1e-06
+        Param 2 name = use sf eval, value = False
+        ---
+        """
+        lines = param_data.splitlines()
+        for i, l in enumerate(lines):
+          splits = l.split(", value = ")
+          value = splits[1]
+          name = splits[0].split(" = ")[1]
+          if i == 0:
+            self.param_1 = value
+            self.param_1_name = name
+          elif i == 1:
+            self.param_2 = value
+            self.param_2_name = name
+          elif i == 2:
+            self.param_3 = value
+            self.param_3_name = name
+
+      if not found_data:
+        raise RuntimeError("Trainer.load_test_report() error: 'Epoch' section not found, does test report contain data?")
+
+      # now handle the test data
+      lines = test_data.splitlines()
+
+      names = []
+      data = []
+
+      datastarted = False
+
+      for i, l in enumerate(lines):
+
+        splits = l.split(" | ")
+
+        if splits[0].startswith("Epoch"):
+          for field in splits:
+            names.append(field)
+          datastarted = True
+        elif datastarted:
+          new_elem = []
+          for field in splits:
+            new_elem.append(float(field))
+          data.append(new_elem)
+
+      if not datastarted:
+        print("Trainer.Tracker.load_test_report() warning: datastarted=False, no data found in test report")
+        return None, None
+      
+      # save the data into our tracker
+      for elem in data:
+        self.test_epochs.append(int(elem[0]))
+        self.train_loss.append(elem[1])
+        self.test_loss.append(elem[2])
+        self.test_mean_sf_diff.append(elem[3])
+        self.test_std_sf_diff.append(elem[4])
+        self.test_mean_my_diff.append(elem[5])
+        self.test_std_my_diff.append(elem[6])
+
+      # convert into a numpy matrix
+      matrix = np.array(data)
+
+      # self.loaded_names = names
+      # self.loaded_data = matrix
+
+      return names, matrix
+
+  def __init__(self, data_dict, log_level=1, load=False, loadnet=False):
     """
     Initialise the trainer
     """
 
     self.params = Trainer.Parameters()
+    self.track = Trainer.Tracker(name=data_dict['savefolder'])
 
     # settings
     self.log_level = log_level
     self.slice_log_rate = 5
+    self.training_info_name = "training_info"
     self.test_report_name = "test_report"
     self.test_report_seperator = "---\n"
     self.weighted_sample_num_combined_bins = 20
@@ -932,20 +1125,18 @@ class Trainer():
     # create variables
     self.net = None
     self.batch_limit = None
-    self.program = None
-    self.param_1 = None
-    self.param_2 = None
-    self.param_3 = None
-    self.param_1_name = None
-    self.param_2_name = None
-    self.param_3_name = None
-    self.train_loss = []
-    self.test_loss = []
-    self.test_epochs = []
-    self.test_mean_my_diff = []
-    self.test_std_my_diff = []
-    self.test_mean_sf_diff = []
-    self.test_std_sf_diff = []
+
+    # are we loading an existing training
+    if load: self.load(load_network=loadnet)
+
+    # # migrate away and delete these later
+    # self.program = None
+    # self.param_1 = None
+    # self.param_2 = None
+    # self.param_3 = None
+    # self.param_1_name = None
+    # self.param_2_name = None
+    # self.param_3_name = None
 
   def init(self, net, lr=None, weight_decay=None, loss_style=None):
     """
@@ -972,7 +1163,7 @@ class Trainer():
 
   def normalise_data(self, data):
     """
-    Normalise data based on [max, mean, std]
+    Normalise data based on [clip, mean, std]
     """
 
     clip = self.params.norm_clip
@@ -986,12 +1177,16 @@ class Trainer():
 
   def denormalise_data(self, data):
     """
-    Undo normalisation based on [max, mean, std]
+    Undo normalisation based on [clip, mean, std]
     """
 
     clip = self.params.norm_clip
     mean = self.params.norm_mean
     std = self.params.norm_std
+
+    data = data * std
+    data = data + (mean / std)
+    return data
 
     return (data * std) + mean
 
@@ -1046,6 +1241,9 @@ class Trainer():
       self.params.norm_clip = self.params.checkmate_value
     else:
       raise RuntimeError("Trainer.characterise_distribution() error: currently requires params.use_sf_eval or params.use_combined_loss to be true")
+
+    # TEMPORARY FIX: set the mean to zero to prevent denormalise data issues
+    self.params.norm_mean = 0
 
   def create_weighted_sampler(self, evaluations, combine_bins=20):
     """
@@ -1132,22 +1330,20 @@ class Trainer():
     else:
       return data_x, data_y
 
-  def train(self, net=None, epochs=None, norm_factors=None,
-            device="cuda", batch_size=None,
-            examine_dist=False):
+  def train(self, net=None, epochs=None, device="cuda", batch_size=None):
     """
     Perform a training epoch for a given network based on data inputs
     data_x, and correct outputs data_y
     """
 
+    # handle function inputs
     if net is not None: self.init(net)
-
     if epochs is not None: self.params.num_epochs = epochs
-
+    if batch_size is not None: self.params.batch_size = batch_size
+    
     # save and print the current training hyperparameters
-    hyperparam_str = self.save_hyperparameters()
-    if self.log_level > 0:
-      print(hyperparam_str)
+    self.save_hyperparameters()
+    if self.log_level > 0: self.print()
 
     # move onto the specified device
     self.net.to(device)
@@ -1155,14 +1351,13 @@ class Trainer():
     # put the model in training mode
     self.net.train()
 
-    # save the input settings
-    self.norm_factors = norm_factors
-    if batch_size is not None: self.params.batch_size = batch_size
+    initial_epoch = len(self.track.test_epochs)
+    final_epoch = initial_epoch + self.params.num_epochs
     
     # each epoch, cover the entire training dataset
-    for i in range(self.params.num_epochs):
+    for i in range(initial_epoch, final_epoch):
 
-      print(f"Starting epoch {i + 1} / {self.params.num_epochs}.", flush=True)
+      print(f"Starting epoch {i + 1} / {final_epoch}.", flush=True)
       total_batches = 0
       epoch_loss = 0
 
@@ -1173,14 +1368,6 @@ class Trainer():
 
         # load this segment of the dataset
         data_x, data_y, sf_evals, sq_evals = self.prepare_data(self.data_dict['loadname'], j, return_dataset=True)
-
-        if examine_dist:
-          import matplotlib.pyplot as plt
-          fig, axs = plt.subplots(1, 1)
-          axs.hist(torch.flatten(data_y).numpy(), bins=50)
-          plt.show()
-          inspect_data(data_y)
-          continue
 
         num_batches = len(data_x) // self.params.batch_size
         if num_batches == 0:
@@ -1233,9 +1420,6 @@ class Trainer():
 
           avg_loss += loss.item()
 
-          # if n % 500 == 0:
-          #   print(f"Loss is {(avg_loss / (n + 1)) * 1000:.3f}, epoch {i + 1}, batch {n + 1} / {num_batches}")
-
         t2 = time.time()
 
         # this dataset slice is finished
@@ -1254,19 +1438,14 @@ class Trainer():
             f"Final slice loss = {avg_loss:.3f}.", flush=True)
       
       # evaluate model performance
-      self.train_loss.append(epoch_loss)
+      self.track.train_loss.append(epoch_loss)
       test_report = self.test(epoch=i+1, device=device)
 
       # print the test report
       print(test_report)
 
-      # save the model after this epoch
-      self.datasaver.save(data_dict['savename'], self.net)
-      self.datasaver.save(self.test_report_name, txtstr=test_report, txtonly=True)
-
-      # trace and save the traced model as well
-      traced_net = torch.jit.trace(self.net, batch_x)
-      traced_net.save(self.datasaver.get_current_path() + "/traced_model.pt")
+      # save the progress of the training, including the test report and traced model
+      self.save(test_report=test_report, trace_batch=batch_x)
 
     # finally, return the network that we have trained
     return self.net
@@ -1338,20 +1517,22 @@ class Trainer():
         if self.params.sample_method == "default":
           batch_x = data_x[rand_idx[n * self.params.batch_size : (n+1) * self.params.batch_size]]
           batch_y = data_y[rand_idx[n * self.params.batch_size : (n+1) * self.params.batch_size]]
+          sf_evals = dataset_1[rand_idx[n * self.params.batch_size : (n+1) * self.params.batch_size]]
+          my_evals = torch.sum(dataset_2[rand_idx[n * self.params.batch_size : (n+1) * self.params.batch_size]], dim=1)
         elif self.params.sample_method == "weighted":
           w_sample_indicies = list(weighted_sampler)
           batch_x = data_x[w_sample_indicies]
           batch_y = data_y[w_sample_indicies]
+          sf_evals = dataset_1[w_sample_indicies]
+          my_evals = torch.sum(dataset_2[w_sample_indicies], dim=1)
         else:
           raise RuntimeError(f"Trainer.train() error: sampling method '{self.params.sample_method}' not recognised")
 
         # go to device
         batch_x = batch_x.to(device)
         batch_y = batch_y.to(device)
-
-        # extract the evaluations from stockfish (sf) and my evaluation function (my)
-        sf_evals = dataset_1[rand_idx[n * self.params.batch_size : (n+1) * self.params.batch_size]].to(device)
-        my_evals = torch.sum(dataset_2[rand_idx[n * self.params.batch_size : (n+1) * self.params.batch_size]], dim=1).to(device)
+        sf_evals = sf_evals.to(device)
+        my_evals = my_evals.to(device)
 
         with torch.no_grad():
 
@@ -1386,9 +1567,6 @@ class Trainer():
         sf_diff_means.append(torch.mean(sf_diff).item())
         sf_diff_vars.append(torch.var(sf_diff).item())
 
-        # if n % 500 == 0:
-        #   print(f"Loss is {(avg_loss / (n + 1)) * 1000:.3f}, epoch {i + 1}, batch {n + 1} / {num_batches}")
-
       t2 = time.time()
       
       # this dataset slice is finished
@@ -1410,11 +1588,6 @@ class Trainer():
     test_loss = test_loss / total_batches
     test_loss = test_loss * 1e3
 
-    test_mean_my_diff = test_mean_my_diff / total_batches
-    test_std_my_diff = (test_std_my_diff / total_batches) ** 0.5 # convert from variance to std dev
-    test_mean_sf_diff = test_mean_sf_diff / total_batches
-    test_std_sf_diff = (test_std_sf_diff / total_batches) ** 0.5 # convert from variance to std dev
-
     # calculate the final mean and variance of each batch
     my_diff_means = np.array(my_diff_means)
     my_diff_overall_mean = np.mean(my_diff_means)
@@ -1424,19 +1597,14 @@ class Trainer():
     sf_diff_overall_mean = np.mean(sf_diff_means)
     sf_diff_overal_std = np.sqrt(np.mean(sf_diff_vars) + np.mean(np.power(sf_diff_means - sf_diff_overall_mean, 2)))
 
-    self.test_epochs.append(epoch)
-    self.test_loss.append(test_loss)
-    self.test_mean_my_diff.append(my_diff_overall_mean) #test_mean_my_diff)
-    self.test_std_my_diff.append(my_diff_overal_std) #test_std_my_diff)
-    self.test_mean_sf_diff.append(sf_diff_overall_mean) #test_mean_sf_diff)
-    self.test_std_sf_diff.append(sf_diff_overal_std) #test_std_sf_diff)
+    self.track.test_epochs.append(epoch)
+    self.track.test_loss.append(test_loss)
+    self.track.test_mean_my_diff.append(my_diff_overall_mean) 
+    self.track.test_std_my_diff.append(my_diff_overal_std)
+    self.track.test_mean_sf_diff.append(sf_diff_overall_mean)
+    self.track.test_std_sf_diff.append(sf_diff_overal_std)
 
-    test_report = self.create_test_report()
-
-    print(f"Testing has finished after {total_batches} batches. Overall average loss = {test_loss:.3f} e-3.", 
-          f"(mean, std) -> Stockfish({test_mean_sf_diff:.3f}, {test_std_sf_diff:.3f}),",
-          f"MyEval({test_mean_my_diff:.3f}, {test_std_my_diff:.3f}) (OLD)",
-          flush=True)
+    test_report = self.track.create_test_report()
     
     print(f"Testing has finished after {total_batches} batches. Overall average loss = {test_loss:.3f} e-3.", 
           f"(mean, std) -> Stockfish({sf_diff_overall_mean:.3f}, {sf_diff_overal_std:.3f}),",
@@ -1447,8 +1615,8 @@ class Trainer():
     self.net.train()
     
     return test_report
-  
-  def save_hyperparameters(self):
+
+  def save_hyperparameters(self, return_only=False):
     """
     Save a text file detailing the key hyperparameters used for training
     """
@@ -1463,14 +1631,83 @@ class Trainer():
     
     savestr += str(param_dict).replace(",", "\n") + "\n"
 
-    self.datasaver.save("hyperparemeters", txtstr=savestr, txtonly=True)
+    if not return_only:
+      self.datasaver.save("hyperparemeters", txtstr=savestr, txtonly=True)
 
     return savestr
+
+  def save(self, test_report=None, trace_batch=None):
+    """
+    Save the training
+    """
+
+    # save the model after this epoch
+    self.datasaver.save(data_dict['savename'], self.net)
+
+    # save the training information
+    to_save = {
+      "params" : self.params,
+      "track" : self.track,
+    }
+    self.datasaver.save(self.training_info_name, to_save, suffix_numbering=False)
+
+    if test_report is not None:
+      self.datasaver.save(self.test_report_name, txtstr=test_report, txtonly=True)
+
+    # trace and save the traced model as well
+    if trace_batch is not None:
+      traced_net = torch.jit.trace(self.net, trace_batch)
+      traced_net.save(self.datasaver.get_current_path() + "/traced_model.pt")
+
+  def load(self, loadpath=None, loadname=None, id=None, load_network=True):
+    """
+    Load an existing trainer, either from existing model path or given a new path
+    """
+
+    if loadpath is None: loadpath = f"{data_dict['path']}/{data_dict['savepath']}/{data_dict['savefolder']}"
+    if loadname is None: loadname = data_dict['savename']
+
+    if self.log_level > 0:
+      print(f"Trainer.load() attempting to load a model at the following path: {loadpath}")
+
+    # create a temporary model loader
+    temp_loader = ModelSaver(loadpath, log_level=self.log_level)
+
+    try:
+      info = temp_loader.load(self.training_info_name, suffix_numbering=False)
+      self.params = info["params"]
+      self.track = info["track"]
+    except Exception as e:
+      if self.log_level > 0:
+        print(f"Trainer.load() warning: failed to find training info, resorting to test report")
+      txt = temp_loader.read_textfile(self.test_report_name)
+      self.track.load_test_report(txt)
+
+    # now load in the existing model
+    if load_network:
+      loaded_net = temp_loader.load(loadname, id=id)
+      self.init(net=loaded_net)
+
+    if self.log_level > 0:
+      print(f"Trainer.load() completed successfully")
+
+  def print(self):
+    """
+    Print key training details
+    """
+
+    hyper_str = self.save_hyperparameters(return_only=True)
+    test_str = self.track.create_test_report()
+
+    print(hyper_str)
+    print(test_str)
 
   def create_test_report(self):
     """
     Return a string which summarises how the testing is going
     """
+
+    return self.track.create_test_report()
 
     report_str = """"""
 
@@ -1483,7 +1720,7 @@ class Trainer():
       if self.param_2 is not None: report_str += f"Param 2 name = {self.param_2_name}, value = {self.param_2}\n"
       if self.param_3 is not None: report_str += f"Param 3 name = {self.param_3_name}, value = {self.param_3}\n"
 
-    if len(self.test_epochs) > 0:
+    if len(self.track.test_epochs) > 0:
       report_str += self.test_report_seperator
 
       header_str = f"{'Epoch':<6} | {'Train Loss / e-3':<16} | {'Test Loss / e-3':<16} | {'SF mean':<7} | {'SF std':<7} | {'My mean':<7} | {'My std':<7}"
@@ -1491,16 +1728,16 @@ class Trainer():
 
       report_str += header_str + "\n"
 
-      for i, e in enumerate(self.test_epochs):
+      for i, e in enumerate(self.track.test_epochs):
 
         report_str += row_str.format(
           e,
-          self.train_loss[i],
-          self.test_loss[i],
-          self.test_mean_sf_diff[i],
-          self.test_std_sf_diff[i],
-          self.test_mean_my_diff[i],
-          self.test_std_my_diff[i]
+          self.track.train_loss[i],
+          self.track.test_loss[i],
+          self.track.test_mean_sf_diff[i],
+          self.track.test_std_sf_diff[i],
+          self.track.test_mean_my_diff[i],
+          self.track.test_std_my_diff[i]
         ) + "\n"
 
     return report_str
@@ -1518,6 +1755,8 @@ class Trainer():
       if as_string: return txt
       
     else: txt = string_input
+
+    return self.track.load_test_report(txt)
 
     sections = txt.split(self.test_report_seperator)
 
@@ -1611,6 +1850,7 @@ if __name__ == "__main__":
   parser.add_argument("-p", "--program", default="default")               # training program name
   parser.add_argument("-lr", "--learning-rate", type=float, default=1e-5) # learning rate during training
   parser.add_argument("-e", "--epochs", type=int, default=5)              # number of training epochs
+  parser.add_argument("-l", "--load", action="store_true")                # load an existing training from the given job/timestamp
   parser.add_argument("--device", default="cuda")                         # device to use, "cpu" or "cuda"
   parser.add_argument("--batch-size", type=int, default=64)               # size of learning batches
   parser.add_argument("--loss-style", default="MSE")                      # loss function, 'MSE', 'L1', or 'Huber'
@@ -1626,6 +1866,7 @@ if __name__ == "__main__":
   parser.add_argument("--batch-limit", type=int, default=0)               # limit batches per file, useful for debugging
   parser.add_argument("--slice-log-rate", type=int, default=5)            # log rate for slices during an epoch
   parser.add_argument("--print-table", action="store_true")               # are we printing a results table
+  parser.add_argument("--check", action="store_true")                     # run only a test version, not a proper training
 
   args = parser.parse_args()
 
@@ -1635,6 +1876,12 @@ if __name__ == "__main__":
 
   if args.torch_threads > 0:
     torch.set_num_threads(args.torch_threads)
+
+  if args.check:
+    args.batch_limit = 1
+    args.train_num = 1
+    args.test_num = 1
+    args.epochs = 3
 
   # saving/loading information
   data_dict = {
@@ -1667,31 +1914,17 @@ if __name__ == "__main__":
   trainer = Trainer(data_dict)
 
   # apply generic settings
-  trainer.program = args.program
+  trainer.track.program = args.program
   trainer.slice_log_rate = args.slice_log_rate
   trainer.params.use_sf_eval = args.use_sf_loss
   trainer.params.use_sq_eval_sum_loss = False
-  default_norm_factors = [7, 0, 2.159] # old
-  default_norm_factors = [10, 0, 4] # new, for datasetv7
+  trainer.params.num_epochs = args.epochs
 
   # apply generic command line settings
   if args.batch_limit > 0:
     trainer.batch_limit = args.batch_limit
 
-  # # create the network based on 19 layer boards
-  # newnet = True
-  # if newnet:
-  #   in_features = 17
-  #   out_features = 64
-  #   net = FCChessNet(in_features, out_features, num_blocks=args.num_blocks, 
-  #                   dropout_prob=args.dropout_prob)
-  
-  # # or load an existing network
-  # else:
-  #   group = "01-11-24"
-  #   run = "run_10-31_A1"
-  #   modelloader = ModelSaver(f"/home/luke/chess/python/models/{group}/{run}")
-  #   net = modelloader.load("network", id=None)
+# ----- now execute a training program ----- #
 
   if args.program == "default":
 
@@ -1932,6 +2165,75 @@ if __name__ == "__main__":
 
     print_time_taken()
 
+  elif args.program == "continue_learning":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 2, 3]
+    vary_2 = [1e-7, 1e-6, 1e-5]
+    vary_3 = None
+    repeats = None
+    trainer.param_1_name = "num layers"
+    trainer.param_2_name = "learning rate"
+    trainer.param_3_name = None
+    trainer.param_1, trainer.param_2, trainer.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    
+    # create and initialise the network
+    in_features = 17
+    out_features = 64
+    net = FCChessNet(in_features, out_features, num_blocks=trainer.param_1, 
+                    dropout_prob=0.0, layer_scaling=64,
+                    block_type="simple")
+    
+    # apply training settings
+    trainer.params.use_sf_eval = True
+    trainer.params.num_epochs = 10
+    trainer.params.loss_style = "l1"
+    trainer.params.learning_rate = trainer.param_2
+    trainer.params.sample_method = "weighted"
+
+    # now execute the training
+    if args.load:
+      trainer.params.num_epochs = 5
+      trainer.load()
+      trainer.train(device=args.device)
+    else:
+      trainer.train(net=net, device=args.device)
+
+    print_time_taken()
+
+  elif args.program == "benchmark_1":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 2]
+    vary_2 = [1e-5, 5e-5]
+    vary_3 = None
+    repeats = None
+    trainer.track.param_1_name = "num layers"
+    trainer.track.param_2_name = "learning rate"
+    trainer.track.param_3_name = None
+    trainer.track.param_1, trainer.track.param_2, trainer.track.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    
+    # apply training settings
+    trainer.params.use_sf_eval = True
+    trainer.params.num_epochs = 15
+    trainer.params.loss_style = "l1"
+    trainer.params.learning_rate = trainer.track.param_2
+    trainer.params.sample_method = "weighted"
+    
+    # create and initialise the network
+    in_features = 17
+    out_features = 64
+    net = FCChessNet(in_features, out_features, num_blocks=trainer.track.param_1, 
+                    dropout_prob=0.0, layer_scaling=64,
+                    block_type="simple")
+
+    # now execute the training
+    trainer.train(net=net, device=args.device)
+
+    print_time_taken()
+
   elif args.program == "example_template":
 
     # define what to vary this training, dependent on job number
@@ -1939,31 +2241,24 @@ if __name__ == "__main__":
     vary_2 = None
     vary_3 = None
     repeats = None
-    trainer.param_1_name = None
-    trainer.param_2_name = None
-    trainer.param_3_name = None
-    trainer.param_1, trainer.param_2, trainer.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+    trainer.track.param_1_name = None
+    trainer.track.param_2_name = None
+    trainer.track.param_3_name = None
+    trainer.track.param_1, trainer.track.param_2, trainer.track.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
                                                          param_3=vary_3, repeats=repeats)
-    print(trainer.create_test_report())
+    
+    # # apply the varied training settings (very important!)
+    # trainer.params.X = trainer.track.param_1
+    # trainer.params.Y = trainer.track.param_2
+    # trainer.params.Z = trainer.track.param_3
     
     # create and initialise the network
     in_features = 17
     out_features = 64
-    net = FCChessNet(in_features, out_features, num_blocks=args.num_blocks, 
-                    dropout_prob=args.dropout_prob)
-    trainer.init(
-      net=net,
-      lr=args.learning_rate,
-      weight_decay=args.weight_decay,
-      loss_style=args.loss_style,
-    )
+    net = FCChessNet(in_features, out_features)
 
     # now execute the training
-    trainer.train(
-      epochs=args.epochs,
-      norm_factors=default_norm_factors,
-      device=args.device
-    )
+    trainer.train(net=net, device=args.device)
 
     print_time_taken()
 
