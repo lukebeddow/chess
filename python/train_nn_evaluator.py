@@ -818,15 +818,18 @@ def print_table(data_dict, timestamp):
 
     # extract the test report data
     data_dict["savefolder"] = f"{group_name}/{run_name.format(timestamp[-5:], j)}"
-    trainer = Trainer(data_dict)
-    names, matrix = trainer.load_test_report()
+
+    trainer = Trainer(data_dict, load=True, loadnet=False, log_level=0)
+    names = trainer.track.names
+    matrix = trainer.track.get_data()
+
     data_list = list(matrix[-1, :]) # take the last row (most recent data)
 
     # now assemble this row of the table
     data_row = [timestamp, j]
-    if trainer.track.param_1 is not None: data_row.append(trainer.track.param_1)
-    if trainer.track.param_2 is not None: data_row.append(trainer.track.param_2)
-    if trainer.track.param_3 is not None: data_row.append(trainer.track.param_3)
+    if trainer.track.param_1 is not None: data_row.append(str(trainer.track.param_1))
+    if trainer.track.param_2 is not None: data_row.append(str(trainer.track.param_2))
+    if trainer.track.param_3 is not None: data_row.append(str(trainer.track.param_3))
     for d in data_list: data_row.append(d)
     table.append(data_row)
 
@@ -893,7 +896,7 @@ class Trainer():
 
     # important dataset management options
     checkmate_value: float = 15           # value to clip all evaluations between
-    sample_method: str = "default"        # how to sample batches, either default or weighted (for even representation)
+    sample_method: str = "weighted"       # how to sample batches, either default or weighted (for even representation)
 
     # normalising factors
     norm_mean: float = 0
@@ -1704,7 +1707,7 @@ class Trainer():
 
   def create_test_report(self):
     """
-    Return a string which summarises how the testing is going
+    Depreciated: return a string which summarises how the testing is going
     """
 
     return self.track.create_test_report()
@@ -1744,7 +1747,8 @@ class Trainer():
   
   def load_test_report(self, as_string=False, string_input=None):
     """
-    Load data from a test report
+    Depreciated: Load data from a test report. Use load instead with loadnet=False
+    and then get the test report from self.track
     """
 
     if string_input is None:
@@ -1841,9 +1845,6 @@ if __name__ == "__main__":
   # starting time
   starting_time = datetime.now()
 
-  # key default settings
-  datestr = "%d-%m-%y_%H-%M" # all date inputs must follow this format
-
   parser = argparse.ArgumentParser()
   parser.add_argument("-j", "--job", type=int, default=1)                 # job input number
   parser.add_argument("-t", "--timestamp", default=None)                  # timestamp override
@@ -1870,6 +1871,8 @@ if __name__ == "__main__":
 
   args = parser.parse_args()
 
+  # create the run and group name using a timestamp
+  datestr = "%d-%m-%y_%H-%M" # all date inputs must follow this format
   timestamp = args.timestamp if args.timestamp else datetime.now().strftime(datestr)
   run_name = f"run_{timestamp[-5:]}_A{args.job}"
   group_name = timestamp[:8]
@@ -1916,9 +1919,11 @@ if __name__ == "__main__":
   # apply generic settings
   trainer.track.program = args.program
   trainer.slice_log_rate = args.slice_log_rate
+
+  # apply specified training parameters (be aware programs can override these)
   trainer.params.use_sf_eval = args.use_sf_loss
-  trainer.params.use_sq_eval_sum_loss = False
   trainer.params.num_epochs = args.epochs
+  trainer.params.loss_style = args.loss_style
 
   # apply generic command line settings
   if args.batch_limit > 0:
@@ -1927,278 +1932,16 @@ if __name__ == "__main__":
 # ----- now execute a training program ----- #
 
   if args.program == "default":
-
-    # create and initialise the network
-    in_features = 17
-    out_features = 64
-    net = FCChessNet(in_features, out_features, num_blocks=args.num_blocks, 
-                    dropout_prob=args.dropout_prob)
-    trainer.init(
-      net=net,
-      lr=args.learning_rate,
-      weight_decay=args.weight_decay,
-      loss_style=args.loss_style,
-    )
-
-    # now execute the training
-    trainer.train(
-      epochs=args.epochs,
-      norm_factors=default_norm_factors,
-      device=args.device
-    )
-
-    print_time_taken()
-
-  elif args.program == "compare_double":
-
-    # define what to vary this training, dependent on job number
-    vary_1 = [False, True]
-    vary_2 = [1, 3]
-    vary_3 = ["l1", "mse"]
-    repeats = 1
-    trainer.param_1_name = "train my first"
-    trainer.param_2_name = "num_blocks"
-    trainer.param_3_name = "loss fcn"
-    trainer.param_1, trainer.param_2, trainer.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
-                                                          param_3=vary_3, repeats=repeats)
-    print(trainer.create_test_report())
-
-    # create and initialise the network
-    in_features = 17
-    out_features = 64
-    net = FCChessNet(in_features, out_features, num_blocks=trainer.param_2, 
-                    dropout_prob=args.dropout_prob)
-    trainer.init(
-      net=net,
-      lr=args.learning_rate,
-      weight_decay=args.weight_decay,
-      loss_style=trainer.param_3,
-    )
-
-    # are we training on sf evaluations straight away
-    trainer.params.use_sf_eval = not trainer.param_1
-
-    print(f"trainer.params.use_sf_eval = {trainer.params.use_sf_eval}")
-    print(f"Loss style is {args.loss_style}")
-    print(f"Learning rate is {args.learning_rate}")
-
-    # pre-define the number of epochs
-    args.epochs = 5
-
-    trainer.train(
-      epochs=args.epochs,
-      norm_factors=default_norm_factors,
-      device=args.device
-    )
-
-    # will we double train
-    if trainer.param_1:
-
-      print("\n--- Now starting double training ---\n")
-
-      # now train to match the stockfish evaluations
-      trainer.params.use_sf_eval = True
-
-      trainer.train(
-        epochs=args.epochs,
-        norm_factors=default_norm_factors,
-        device=args.device
-      )
-
-    print_time_taken()
-
-  elif args.program == "compare_lr":
-
-    # define what to vary this training, dependent on job number
-    vary_1 = [1e-6, 5e-6, 1e-5, 5e-5, 1e-4]
-    vary_2 = [False, True]
-    vary_3 = None
-    repeats = 1
-    trainer.param_1_name = "learning rate"
-    trainer.param_2_name = "use sf eval"
-    trainer.param_3_name = None
-    trainer.param_1, trainer.param_2, trainer.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
-                                                         param_3=vary_3, repeats=repeats)
-    print(trainer.create_test_report())
     
     # create and initialise the network
     in_features = 17
     out_features = 64
     net = FCChessNet(in_features, out_features, num_blocks=args.num_blocks, 
-                    dropout_prob=args.dropout_prob)
-    trainer.init(
-      net=net,
-      lr=trainer.param_1,
-      weight_decay=args.weight_decay,
-      loss_style=args.loss_style,
-    )
-
-    # important! hardcode settings
-    args.epochs = 5
-    trainer.params.use_sf_eval = trainer.param_2
-
-    # now execute the training
-    trainer.train(
-      epochs=args.epochs,
-      norm_factors=default_norm_factors,
-      device=args.device
-    )
-
-    print_time_taken()
-
-  elif args.program == "compare_layers":
-
-    # define what to vary this training, dependent on job number
-    vary_1 = [1, 2, 3]
-    vary_2 = [32, 64, 96]
-    vary_3 = None
-    repeats = None
-    trainer.param_1_name = "num layers"
-    trainer.param_2_name = "layer width"
-    trainer.param_3_name = None
-    trainer.param_1, trainer.param_2, trainer.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
-                                                         param_3=vary_3, repeats=repeats)
-    print(trainer.create_test_report())
-    
-    # create and initialise the network
-    in_features = 17
-    out_features = 64
-    net = FCChessNet(in_features, out_features, num_blocks=trainer.param_1, 
-                    dropout_prob=0.0, layer_scaling=trainer.param_2,
-                    block_type="simple")
-    trainer.init(
-      net=net,
-      lr=args.learning_rate,
-      weight_decay=args.weight_decay,
-      loss_style=args.loss_style,
-    )
-
-    # important! hardcode settings
-    args.epochs = 5
-    args.learning_rate = 1e-5
-    trainer.params.use_sf_eval = True
-
-    # now execute the training
-    trainer.train(
-      epochs=args.epochs,
-      norm_factors=default_norm_factors,
-      device=args.device
-    )
-
-    print_time_taken()
-
-  elif args.program == "combined_loss":
-
-    # define what to vary this training, dependent on job number
-    vary_1 = [True, False]
-    vary_2 = None
-    vary_3 = None
-    repeats = None
-    trainer.param_1_name = "use attention"
-    trainer.param_2_name = None
-    trainer.param_3_name = None
-    trainer.param_1, trainer.param_2, trainer.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
-                                                         param_3=vary_3, repeats=repeats)
-    print(trainer.create_test_report())
-    
-    # create and initialise the networks
-    in_features = 17
-    if trainer.param_1:
-      net = ChessNetAttention(in_features, penultimate_channels=64, num_blocks=1,
-                              layer_scaling=64, dropout_prob=0.0)
-    else:
-      out_features = 65
-      net = FCChessNet(in_features, out_features, num_blocks=1, block_type="simple",
-                      dropout_prob=0.0, layer_scaling=64,)
-    
-    # important! hardcode settings
-    args.epochs = 5
-    args.learning_rate = 1e-5
-    trainer.use_combined_loss = True
-
-    trainer.init(
-      net=net,
-      lr=args.learning_rate,
-      weight_decay=args.weight_decay,
-      loss_style=args.loss_style,
-    )
-
-    # now execute the training
-    trainer.train(
-      epochs=args.epochs,
-      norm_factors=default_norm_factors,
-      device=args.device
-    )
-
-    print_time_taken()
-
-  elif args.program == "compare_learning":
-
-    # define what to vary this training, dependent on job number
-    vary_1 = [1, 2, 3]
-    vary_2 = [1e-7, 1e-6, 1e-5]
-    vary_3 = None
-    repeats = None
-    trainer.param_1_name = "num layers"
-    trainer.param_2_name = "learning rate"
-    trainer.param_3_name = None
-    trainer.param_1, trainer.param_2, trainer.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
-                                                         param_3=vary_3, repeats=repeats)
-    print(trainer.create_test_report())
-    
-    # create and initialise the network
-    in_features = 17
-    out_features = 64
-    net = FCChessNet(in_features, out_features, num_blocks=trainer.param_1, 
                     dropout_prob=0.0, layer_scaling=64,
                     block_type="simple")
-    
-    # apply training settings
-    trainer.params.use_sf_eval = True
-    trainer.params.num_epochs = 10
-    trainer.params.loss_style = "l1"
-    trainer.params.learning_rate = trainer.param_2
-    trainer.params.sample_method = "weighted"
 
     # now execute the training
     trainer.train(net=net, device=args.device)
-
-    print_time_taken()
-
-  elif args.program == "continue_learning":
-
-    # define what to vary this training, dependent on job number
-    vary_1 = [1, 2, 3]
-    vary_2 = [1e-7, 1e-6, 1e-5]
-    vary_3 = None
-    repeats = None
-    trainer.param_1_name = "num layers"
-    trainer.param_2_name = "learning rate"
-    trainer.param_3_name = None
-    trainer.param_1, trainer.param_2, trainer.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
-                                                         param_3=vary_3, repeats=repeats)
-    
-    # create and initialise the network
-    in_features = 17
-    out_features = 64
-    net = FCChessNet(in_features, out_features, num_blocks=trainer.param_1, 
-                    dropout_prob=0.0, layer_scaling=64,
-                    block_type="simple")
-    
-    # apply training settings
-    trainer.params.use_sf_eval = True
-    trainer.params.num_epochs = 10
-    trainer.params.loss_style = "l1"
-    trainer.params.learning_rate = trainer.param_2
-    trainer.params.sample_method = "weighted"
-
-    # now execute the training
-    if args.load:
-      trainer.params.num_epochs = 5
-      trainer.load()
-      trainer.train(device=args.device)
-    else:
-      trainer.train(net=net, device=args.device)
 
     print_time_taken()
 
@@ -2226,6 +1969,38 @@ if __name__ == "__main__":
     in_features = 17
     out_features = 64
     net = FCChessNet(in_features, out_features, num_blocks=trainer.track.param_1, 
+                    dropout_prob=0.0, layer_scaling=64,
+                    block_type="simple")
+
+    # now execute the training
+    trainer.train(net=net, device=args.device)
+
+    print_time_taken()
+
+  elif args.program == "benchmark_2":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1e-7, 3e-7, 1e-6, 3e-6]
+    vary_2 = ["l1", "mse"]
+    vary_3 = None
+    repeats = None
+    trainer.track.param_1_name = "learning rate"
+    trainer.track.param_2_name = "loss style"
+    trainer.track.param_3_name = None
+    trainer.track.param_1, trainer.track.param_2, trainer.track.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    
+    # apply training settings
+    trainer.params.use_sf_eval = True
+    trainer.params.num_epochs = 15
+    trainer.params.learning_rate = trainer.track.param_1
+    trainer.params.loss_style = trainer.track.param_2
+    trainer.params.sample_method = "weighted"
+    
+    # create and initialise the network
+    in_features = 17
+    out_features = 64
+    net = FCChessNet(in_features, out_features, num_blocks=1, 
                     dropout_prob=0.0, layer_scaling=64,
                     block_type="simple")
 
