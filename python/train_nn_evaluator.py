@@ -1,6 +1,3 @@
-import modules.board_module as bf
-import modules.tree_module as tf
-import modules.stockfish_module as sf
 from ModelSaver import ModelSaver
 import os
 import random
@@ -15,6 +12,11 @@ from datetime import datetime
 
 import torch
 import torch.nn as nn
+
+# import the compiled modules (must import after torch)
+import modules.board_module as bf
+import modules.tree_module as tf
+import modules.stockfish_module as sf
 
 # Move = namedtuple("Move",
 #                   ("move_letters", "eval", "depth", "ranking"))
@@ -811,6 +813,8 @@ def print_table(data_dict, timestamp):
   # check for failures
   if len(job_nums) == 0:
     print(f"train_nn_evaluator.py warning: print_table found zero trainings matching '{run_starts}'")
+  else:
+    print(f"print_table() found jobs:", job_nums)
 
   table = []
 
@@ -871,7 +875,7 @@ def print_table(data_dict, timestamp):
 
   # print and save the table
   print("\n" + print_str)
-  with open(group_path + f"run_{timestamp[-5:]}_results.txt", 'w') as f:
+  with open(group_path + f"/run_{timestamp[-5:]}_results.txt", 'w') as f:
     f.write(print_str)
 
 class Trainer():
@@ -1841,6 +1845,8 @@ class Trainer():
     return names, matrix
 
 if __name__ == "__main__":
+
+  print("train_nn_evaluator.py has started")
 
   # starting time
   starting_time = datetime.now()

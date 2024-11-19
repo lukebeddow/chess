@@ -33,6 +33,33 @@ parseJobs()
     fi
 }
 
+autoGetTimestamp()
+{
+    # get the name of the most recent training log file
+    recent_run=$(cd $LOG_FOLDER && ls -1t | head -1)
+    echo Auto-detected most recent_run is: $recent_run
+
+    # split it by underscore into four variables
+    IFS="_" read v1 v2 v3 v4 <<< "$recent_run"
+
+    # reconstruct and save the timestamp
+    under="_"
+    TIMESTAMP="$v2$under$v3"
+    echo Auto-detected timestamp is: $TIMESTAMP
+}
+
+print_table()
+{
+    # print a training recap table
+    $FAKETTY $PYTHON $SCRIPT_TRAIN \
+        --timestamp $TIMESTAMP \
+        --print-table \
+        ${PY_ARGS[@]}
+
+    echo "Finished"
+    exit
+}
+
 # from: https://stackoverflow.com/questions/1401002/how-to-trick-an-application-into-thinking-its-stdout-is-a-terminal-not-a-pipe
 faketty() {
     script -qfc "$(printf "%q " "$@")" /dev/null
@@ -43,6 +70,7 @@ faketty() {
 TIMESTAMP="$(date +%d-%m-%y_%H-%M)"
 PY_ARGS=() # arguments passed directly into python without parsing
 LOGGING='Y' # logging enabled by default
+PRINTTABLE='N' # print a table
 GEN_DATA='N' # not a generate data job by default
 NUM_RAND=4096 # default number of positions to generate for
 
@@ -58,6 +86,8 @@ do
     # without arguments
     -d | --debug ) LOGGING='N'; echo Debug mode on, terminal logging on ;;
     -g | --generate-data ) GEN_DATA='Y'; echo generate data job selected ;;
+    -a | --auto-timestamp ) autoGetTimestamp ;;
+    --print-table ) PRINTTABLE='Y'; echo Preparing to print a results table ;;
     # everything else passed directly to python
     * ) PY_ARGS+=( ${!i} ) ;;
   esac
@@ -66,6 +96,12 @@ done
 echo Arguments passed to python script are: ${PY_ARGS[@]}
 
 # ----- main job submission ----- #
+
+# print a training results table
+if [ $PRINTTABLE = 'Y' ]
+then
+    print_table
+fi
 
 # create the log folder if needed
 if [ $LOGGING = 'Y' ]
@@ -85,8 +121,10 @@ do
 
     if [ $GEN_DATA = 'Y' ]
     then
+        PRINTTABLE='N'
         JOB_NAME="data_generation_job_${I}"
     else
+        PRINTTABLE='Y'
         JOB_NAME="run_${TIMESTAMP}_A${I}"
     fi
     
@@ -142,3 +180,10 @@ echo Waiting for submitted jobs to complete...
 wait 
 
 echo ...finished all jobs
+
+# print a training results table
+if [ $PRINTTABLE = 'Y' ]
+then
+    echo "Now printing a table of training results"
+    print_table
+fi

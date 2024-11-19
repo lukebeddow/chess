@@ -4467,7 +4467,8 @@ int eval_board_nn(Board& board, bool white_to_play)
     bool use_combined_loss = false;
     int final_eval = 0;
     // float denorm = 7 * 2.159;
-    float denorm = 10 * 4;
+    // float denorm = 10 * 4;
+    float denorm = 4.3687;
 
     if (use_combined_loss) {
 
@@ -4500,8 +4501,8 @@ int eval_board_nn(Board& board, bool white_to_play)
 
         final_eval = eval;
 
-        // datasetv7 error: all evals are *-1
-        final_eval = -final_eval;
+        // // datasetv7 error: all evals are *-1
+        // final_eval = -final_eval;
     }
 
     return final_eval;
