@@ -389,7 +389,7 @@ public:
     int print_level; //0=none, 1=minimum, 2=roundup, 3=layer_by_layer, 4=all
 
     bool use_nn_eval = false;
-    std::string nn_eval_path = LUKE_ROOTPATH "/python/models/traced_model.pt";
+    std::string nn_eval_path = LUKE_ROOTPATH "/python/nn_evaluator/traced_model.pt";
 
     Engine();
     void set_width(int width);
