@@ -897,6 +897,7 @@ class Trainer():
     use_combined_loss: bool = False       # combine stockfish and my eval in loss term
     use_sf_eval: bool = True              # use stockfish evaluations to train, rather than my evaluations
     use_sq_eval_sum_loss: bool = False    # if using my eval, include the sum in the loss term (i.e. overall eval)
+    network_outputs: int = 64             # number of outputs from the network
 
     # important dataset management options
     checkmate_value: float = 15           # value to clip all evaluations between
@@ -1214,7 +1215,10 @@ class Trainer():
 
     elif self.params.use_sf_eval:
 
-      loss = self.lossfcn(torch.sum(net_y, dim=1), true_y)
+      if self.params.network_outputs == 1:
+        loss = self.lossfcn(net_y, true_y)
+      else:
+        loss = self.lossfcn(torch.sum(net_y, dim=1), true_y)
 
     else:
 
@@ -1559,7 +1563,10 @@ class Trainer():
           sf_diff = torch.abs(net_sf_eval - sf_evals)
           my_diff = torch.abs(net_my_evals - my_evals)
         else:
-          net_y_evals = torch.sum(net_y_denorm, dim=1)
+          if self.params.network_outputs == 1:
+            net_y_evals = net_y_denorm
+          else:
+            net_y_evals = torch.sum(net_y_denorm, dim=1)
           sf_diff = torch.abs(net_y_evals - sf_evals)
           my_diff = torch.abs(net_y_evals - my_evals)
 
@@ -2008,6 +2015,39 @@ if __name__ == "__main__":
     out_features = 64
     net = FCChessNet(in_features, out_features, num_blocks=1, 
                     dropout_prob=0.0, layer_scaling=64,
+                    block_type="simple")
+
+    # now execute the training
+    trainer.train(net=net, device=args.device)
+
+    print_time_taken()
+
+  elif args.program == "benchmark_3":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [1, 64]
+    vary_2 = [96, 128]
+    vary_3 = [1, 2]
+    repeats = None
+    trainer.track.param_1_name = "num outputs"
+    trainer.track.param_2_name = "layer width"
+    trainer.track.param_3_name = "num layers"
+    trainer.track.param_1, trainer.track.param_2, trainer.track.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    
+    # apply training settings
+    trainer.params.use_sf_eval = True
+    trainer.params.num_epochs = 10
+    trainer.params.learning_rate = 1e-5
+    trainer.params.loss_style = "l1"
+    trainer.params.sample_method = "weighted"
+    trainer.params.network_outputs = trainer.track.param_1
+    
+    # create and initialise the network
+    in_features = 17
+    out_features = trainer.params.network_outputs
+    net = FCChessNet(in_features, out_features, num_blocks=trainer.track.param_3, 
+                    dropout_prob=0.0, layer_scaling=trainer.track.param_2,
                     block_type="simple")
 
     # now execute the training
