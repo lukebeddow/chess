@@ -41,15 +41,23 @@ endif
 include buildsettings.mk
 
 # define compiler flags and libraries
-COMMON = $(DEBUG) -std=c++17 -mavx -pthread -I$(PYTHON_INCLUDE) \
-	-I$(PYBIND_PATH)/include \
-	-I$(PYTORCH_PATH)/include \
-	-I$(PYTORCH_PATH)/include/torch/csrc/api/include \
-	-L$(PYTORCH_PATH)/lib \
-	-DLUKE_PYTORCH \
-	-D_GLIBCXX_USE_CXX11_ABI=0 \
-	-Wl,-rpath,$$ORIGIN:$(PYTORCH_PATH)/lib
+COMMON = $(DEBUG) -std=c++17 -mavx -pthread \
+	$(INCLUDES) \
+	$(LIBRARIES) \
+	$(VARIABLES) \
+	-Wl,-rpath,$(RPATH)
 PYBIND = $(COMMON) -fPIC -Wall -shared -DLUKE_PYBIND
+
+# # define compiler flags and libraries
+# COMMON = $(DEBUG) -std=c++17 -mavx -pthread -I$(PYTHON_INCLUDE) \
+# 	-I$(PYBIND_PATH)/include \
+# 	-I$(PYTORCH_PATH)/include \
+# 	-I$(PYTORCH_PATH)/include/torch/csrc/api/include \
+# 	-L$(PYTORCH_PATH)/lib \
+# 	-DLUKE_PYTORCH \
+# 	-D_GLIBCXX_USE_CXX11_ABI=0 \
+# 	-Wl,-rpath,$$ORIGIN:$(PYTORCH_PATH)/lib
+# PYBIND = $(COMMON) -fPIC -Wall -shared -DLUKE_PYBIND
 
 # COMMON = $(DEBUG) -std=c++17 -mavx -pthread -I$(PYTHON_INCLUDE)\
 # 	-I$(PYBIND_PATH)/include \
@@ -93,6 +101,7 @@ $(info $(shell mkdir -p $(DIRS)))
 # ----- start of make ----- #
 
 all: cpp py
+torch: cpp py
 cpp: $(CPPTARGETS) $(DEPENDS)
 py: $(PYTARGETS) $(DEPENDS)
 
@@ -119,9 +128,9 @@ $(PYTARGETOBJ): $(BUILDDIR)/%.o : $(SOURCEDIR)/%.cpp
 
 # build targets
 $(CPPTARGETS): $(OUTCPP)% : $(BUILDDIR)%.o $(CPPSHAREDOBJ)
-	g++ $(COMMON) $^ -o $@ $(LIBS) 
+	g++ $(COMMON) $^ -o $@ $(LIB_FILES) 
 $(PYTARGETS): $(OUTPY)%.so : $(BUILDDIR)%.o $(PYSHAREDOBJ)
-	g++ $(PYBIND) $^ -o $@ $(LIBS)
+	g++ $(PYBIND) $^ -o $@ $(LIB_FILES)
 
 # if not cleaning, declare the dependencies of each object file (headers and source)
 ifneq ($(filter clean, $(MAKECMDGOALS)), clean)

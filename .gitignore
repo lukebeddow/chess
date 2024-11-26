@@ -9,6 +9,7 @@ stockfish/
 gamedata/
 gmon.out
 profile.txt
+requirements.in
 models/
 logs/
 datasets/

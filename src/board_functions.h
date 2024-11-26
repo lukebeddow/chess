@@ -304,6 +304,7 @@ struct BoardVectors {
 
 #if defined(LUKE_PYTORCH)
     void init_nn(std::string loadpath);
+    bool is_nn_loaded();
     generated_moves_struct generate_moves_nn(Board& board, bool white_to_play);
 #endif
 

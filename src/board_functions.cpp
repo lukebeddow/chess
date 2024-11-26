@@ -4359,38 +4359,50 @@ BoardVectors FEN_move_eval_to_board_vectors(std::string fen, std::string move_st
 
 #if defined(LUKE_PYTORCH)
 
-// void init_nn(std::string loadpath)
-// {
-//     /* initialise the pytorch neural network, given a loadpath */
+bool network_initialised = false;
+torch::jit::script::Module chess_network;
 
-//     std::cout << "Preparing to load a neural network at path: " << loadpath << "\n";
+void init_nn(std::string loadpath)
+{
+    /* initialise the pytorch neural network, given a loadpath */
 
-//     try {
-//         // Deserialize the ScriptModule from a file using torch::jit::load().
-//         chess_network = torch::jit::load(loadpath);
-//     }
-//     catch (const c10::Error& e) {
-//         std::cerr << "error loading the model\n";
-//         return;
-//     }
+    std::cout << "Preparing to load a neural network at path: " << loadpath << "\n";
 
-//     std::cout << "Successfully loaded\n";
+    try {
+        // Deserialize the ScriptModule from a file using torch::jit::load().
+        chess_network = torch::jit::load(loadpath, torch::kCPU);
+        network_initialised = true;
+    }
+    catch (const c10::Error& e) {
+        std::cerr << "error loading the model\n";
+        return;
+    }
 
-//     return;
-// }
+    std::cout << "Successfully loaded\n";
+
+    return;
+}
+
+bool is_nn_loaded()
+{
+    return network_initialised;
+}
 
 int eval_board_nn(Board& board, bool white_to_play)
 {
-    static bool initialised = false;
+    // static bool initialised = false;
+    // static torch::jit::script::Module chess_network;
 
-    static torch::jit::script::Module chess_network;
+    // if (not initialised) {
+    //     std::string loadpath = "/home/luke/chess/python/models/traced_model.pt";
+    //     std::cout << "Preparing to load a neural network at path: " << loadpath << "\n";
+    //     chess_network = torch::jit::load(loadpath, torch::kCPU);
+    //     initialised = true;
+    //     std::cout << "Successfully loaded\n";
+    // }
 
-    if (not initialised) {
-        std::string loadpath = "/home/luke/chess/python/models/traced_model.pt";
-        std::cout << "Preparing to load a neural network at path: " << loadpath << "\n";
-        chess_network = torch::jit::load(loadpath, torch::kCPU);
-        initialised = true;
-        std::cout << "Successfully loaded\n";
+    if (not network_initialised) {
+        throw std::runtime_error("eval_board_nn() called, but network has not been initialised. Call 'init_nn(loadpath)' first.");
     }
 
     if (not white_to_play) {

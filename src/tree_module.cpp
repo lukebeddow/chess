@@ -107,6 +107,9 @@ PYBIND11_MODULE(tree_module, m) {
         .def("set_depth", &Engine::set_depth)
         .def("generate_engine_moves_FEN", &Engine::generate_engine_moves_FEN, 
             py::arg("fen_string") = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR", py::arg("target_time") = 5)
+        .def("enable_nn_evaluator", py::overload_cast<>(&Engine::enable_nn_evaluator))
+        .def("enable_nn_evaluator", py::overload_cast<std::string>(&Engine::enable_nn_evaluator))
+        .def("disable_nn_evaluator", &Engine::disable_nn_evaluator)
         .def_readwrite("use_nn_eval", &Engine::use_nn_eval)
         ;
 
@@ -137,6 +140,8 @@ PYBIND11_MODULE(tree_module, m) {
         .def("get_engine_move", py::overload_cast<int>(&GameBoard::get_engine_move))
         .def("get_engine_move_no_GIL", &GameBoard::get_engine_move_no_GIL,
             py::call_guard<py::gil_scoped_release>())
+        .def("use_nn_evaluator", py::overload_cast<>(&GameBoard::use_nn_evaluator))
+        .def("use_nn_evaluator", py::overload_cast<std::string>(&GameBoard::use_nn_evaluator))
         ;
 
     //m.def("get_engine_move_no_GIL", [](GameBoard* gameboard) -> std::string {
@@ -152,6 +157,8 @@ PYBIND11_MODULE(tree_module, m) {
         .def("human_move", &Game::human_move)
         .def("engine_move", &Game::engine_move)
         .def("get_last_move", &Game::get_last_move)
+        .def("use_nn_evaluator", py::overload_cast<>(&Game::use_nn_evaluator))
+        .def("use_nn_evaluator", py::overload_cast<std::string>(&Game::use_nn_evaluator))
         ;
 
 #ifdef VERSION_INFO

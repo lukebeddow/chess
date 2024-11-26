@@ -2080,7 +2080,7 @@ std::vector<TreeKey> LayeredTree::add_depth_at_key(TreeKey key)
         #if defined(LUKE_PYTORCH)
             gen_moves = generate_moves_nn(board, white_to_play);
         #else
-            throw std::runtime_error("LUKE_PYTORCH not defined");
+            throw std::runtime_error("LUKE_PYTORCH not defined, but LayeredTree::use_nn_eval = True");
         #endif
     }
     else {
@@ -2398,9 +2398,14 @@ void Engine::print_startup(std::unique_ptr<LayeredTree>& tree_ptr)
         print_str("Engine generating moves to depth " + std::to_string(settings.depth));
     }
 
+    if (print_level > 1) {
+        print_vector(settings.depth_vector, "\tThe depth vector");
+        print_vector(settings.width_vector, "\tThe width vector");
+        print_vector(settings.prune_vector, "\tThe prune vector");
+        std::cout << "\tuse_nn_eval = " << use_nn_eval << "\n";
+    }
+
     if (print_level > 2) {
-        // print_vector(settings.width_vector, "\tThe width vector");
-        // print_vector(settings.prune_vector, "\tThe prune vector");
         if (settings.target_time < 0) {
             print_str("No target time or target boards");
         }
@@ -2465,9 +2470,9 @@ void Engine::print_roundup(std::unique_ptr<LayeredTree>& tree_ptr)
         print_str("\tBest evaluation: " + std::to_string(analysis.best_eval * 1e-3));
         print_str("\tDepth checked to: " + std::to_string(analysis.depth_evaluated));
         print_str("\tBoards checked: " + std::to_string(details.boards_checked));
-        print_str("\tTotal time (s): " + std::to_string(round(double(details.total_ms)) * 1e-3));
-        print_str("\tTime per board (ms): " + std::to_string(round(details.ms_per_board * 1e3) * 1e-3));
-        print_str("\tBoards per second: " + std::to_string(round(1000.0 / details.ms_per_board)));
+        print_str("\tTotal time (s): " + std::to_string(std::round(double(details.total_ms)) * 1e-3));
+        print_str("\tTime per board (ms): " + std::to_string(std::round(details.ms_per_board * 1e3) * 1e-3));
+        print_str("\tBoards per second: " + std::to_string(std::round(1000.0 / details.ms_per_board)));
         print_str("\tEngine ran out of time: " + std::to_string(analysis.allowable_time_exceeded));
         print_str("\tTarget depth: " + std::to_string(settings.depth));
         print_str("\tTarget width: " + std::to_string(settings.width));
@@ -2579,7 +2584,7 @@ void Engine::calculate_settings(double target_time)
         // calculate the total boards with these settings
         boards = 0;
         for (int d = 0; d < depth; d++) {
-            boards += min_prune + d * width_scale * pow(width, width_power);
+            boards += min_prune + d * width_scale * std::pow(width, width_power);
         }
         
         // determine the error fraction
@@ -2641,7 +2646,7 @@ void Engine::calculate_settings(double target_time)
 
         for (int d = 0; d < depth; d++) {
             boards += int(tune * 
-                (min_prune + d * width_scale * pow(width, width_power)));
+                (min_prune + d * width_scale * std::pow(width, width_power)));
         }
 
         board_error = total_boards - boards;
@@ -2670,7 +2675,7 @@ void Engine::calculate_settings(double target_time)
 
         // set the prune target for that depth
         settings.prune_vector.push_back(int(tune * (min_prune 
-            + d * width_scale * pow(width, width_power))));
+            + d * width_scale * std::pow(width, width_power))));
     }
 
     // helpful to total up the target number of boards
@@ -2887,8 +2892,6 @@ void Engine::depth_search(std::unique_ptr<LayeredTree>& tree_ptr, int depth, int
     tree_ptr->width_ = width;
     settings.width = width;
     settings.depth = depth;
-
-    tree_ptr->use_nn_eval = use_nn_eval;
 
     // how to handle printing during search?
     // print_layer(tree_ptr, 0);
@@ -3114,18 +3117,24 @@ std::vector<MoveEntry> Engine::generate_engine_moves(Board board, bool white_to_
     // make a new tree
     std::unique_ptr<LayeredTree> tree_ptr = std::make_unique<LayeredTree>
         (board, white_to_play, settings.width);
+    tree_ptr->use_nn_eval = use_nn_eval;
 
-    // print initial information
-    print_startup(tree_ptr);
-
-    bool game_continues;
-
+    // temporary measure: hardcode the search parameters
     std::vector<int> depth_vector {2, 4, 6, 8};
     std::vector<int> width_vector {30, 15, 10, 5};
     std::vector<int> prune_slack_vector {10000, 1000, 500, 250};
 
     // std::vector<int> depth_vector {1};
     // std::vector<int> width_vector {40};
+
+    // ensure the settings correctly record the search parameters
+    settings.depth = depth_vector[depth_vector.size() - 1];
+    settings.depth_vector = depth_vector;
+    settings.width_vector = width_vector;
+    settings.prune_vector = prune_slack_vector;
+
+    // print initial information
+    print_startup(tree_ptr);
 
     // depth search with iterative deepening
     for (int i = 0; i < depth_vector.size(); i++) {
@@ -3195,6 +3204,63 @@ std::vector<MoveEntry> Engine::generate_engine_moves_FEN(std::string fen, double
     }
 
     return generate_engine_moves(board, white_to_play, target_time);
+}
+
+void Engine::enable_nn_evaluator()
+{
+    /* turn on using a neural network evaluator, using the default path */
+
+    enable_nn_evaluator(nn_eval_path);
+}
+
+void Engine::enable_nn_evaluator(std::string path)
+{
+    /* turn on using a neural network evaluator, and give the path from where it should be loaded */
+
+    #if defined(LUKE_PYTORCH)
+
+        // check if we have already loaded a neural network
+        bool already_loaded = is_nn_loaded();
+        if (already_loaded) {
+            // check if the new given path is identical to our loaded path
+            if (path == nn_eval_path) {
+                std::cout << "Engine::enable_nn_evaluator(): nn_eval already loaded, not reloading, path is: " << path << "\n";
+                std::cout << "Engine::enable_nn_evaluator() has set use_nn_eval = " << use_nn_eval << "\n";
+                use_nn_eval = true;
+                return;
+            }
+        }
+
+        try {
+            init_nn(path);
+        }
+        catch (const c10::Error& e) {
+            std::cout << "Engine::enable_nn_evaluator() error: network could not be loaded, aborting\n";
+        }
+
+        use_nn_eval = is_nn_loaded();
+
+        // if successful, update the loadpath
+        if (use_nn_eval) {
+            nn_eval_path = path;
+        }
+
+    #else
+
+        std::cout << "Engine::enable_nn_evaluator() error: not compiled with pytorch, aborting, nn_eval NOT AVAILABLE\n";
+        use_nn_eval = false;
+
+    #endif
+
+    std::cout << "Engine::enable_nn_evaluator() has set use_nn_eval = " << use_nn_eval << "\n";
+}
+
+void Engine::disable_nn_evaluator()
+{
+    /* disable use of the nn evaluator */
+
+    use_nn_eval = false;
+    std::cout << "Engine::disable_nn_evaluator() has set use_nn_eval = " << use_nn_eval << "\n";
 }
 
 GameBoard::GameBoard()
@@ -3436,6 +3502,20 @@ std::string GameBoard::get_square_piece(int square_num)
     }
 }
 
+void GameBoard::use_nn_evaluator()
+{
+    /* try to load a neural network evaluator in the engine using the default path */
+
+    engine_pointer->enable_nn_evaluator();
+}
+
+void GameBoard::use_nn_evaluator(std::string path_to_load_model)
+{
+    /* try to load a neural network evaluator in the engine */
+
+    engine_pointer->enable_nn_evaluator(path_to_load_model);
+}
+
 std::string GameBoard::get_engine_move()
 {
     /* overload */
@@ -3466,6 +3546,7 @@ Game::Game()
 {
     /* constructor */
 
+    // create the chess engine object
     engine_pointer = std::make_unique<Engine>();
 }
 
@@ -3474,7 +3555,6 @@ void Game::play_terminal(bool human_first)
     /* play a game */
 
     Board board = create_board();
-    engine_pointer = std::make_unique<Engine>();
 
     // engine settings
     engine_pointer->set_depth(6);
@@ -3571,6 +3651,20 @@ bool Game::is_move_legal(Board board, bool white_to_play, std::string move_strin
     else {
         return false;
     }
+}
+
+void Game::use_nn_evaluator()
+{
+    /* try to load a neural network evaluator in the engine using the default path */
+
+    engine_pointer->enable_nn_evaluator();
+}
+
+void Game::use_nn_evaluator(std::string path_to_load_model)
+{
+    /* try to load a neural network evaluator in the engine */
+
+    engine_pointer->enable_nn_evaluator(path_to_load_model);
 }
 
 Board Game::human_move(Board board, bool white_to_play, std::string move_string)
