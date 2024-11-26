@@ -1,10 +1,6 @@
 # ----- description ----- #
 
-# This Makefile compiles code which interfaces with mujoco physics simulator.
-# There are two key targets, firstly a c++ compilation and secondly a python
-# compilation. The c++ compilation results in an executable aimed at testing.
-# The python compilation results in a python module that can be imported and
-# used from within python.
+# This Makefile compiles my chess engine into c++ executables and python modules
 
 # Useful resources:
 #		https://www.gnu.org/software/make/manual/html_node/Automatic-Variables.html
@@ -17,6 +13,7 @@
 # define the targets (must compile from a .cpp file with same name in SOURCEDIR)
 TARGET_LIST_CPP := play_terminal dr_memory_build test_terminal
 TARGET_LIST_PY := board_module tree_module stockfish_module
+# TARGET_LIST_PY := torch_module
 
 # define directory structure
 SOURCEDIR := src
@@ -44,10 +41,33 @@ endif
 include buildsettings.mk
 
 # define compiler flags and libraries
-COMMON = $(DEBUG) -std=c++14 -mavx -pthread -I$(PYTHON_INCLUDE) \
-	-I$(PYBIND_PATH)/include \
-	-Wl,-rpath,'$$ORIGIN'
+COMMON = $(DEBUG) -std=c++17 -mavx -pthread \
+	$(INCLUDES) \
+	$(LIBRARIES) \
+	$(VARIABLES) \
+	-Wl,-rpath,$(RPATH)
 PYBIND = $(COMMON) -fPIC -Wall -shared -DLUKE_PYBIND
+
+# # define compiler flags and libraries
+# COMMON = $(DEBUG) -std=c++17 -mavx -pthread -I$(PYTHON_INCLUDE) \
+# 	-I$(PYBIND_PATH)/include \
+# 	-I$(PYTORCH_PATH)/include \
+# 	-I$(PYTORCH_PATH)/include/torch/csrc/api/include \
+# 	-L$(PYTORCH_PATH)/lib \
+# 	-DLUKE_PYTORCH \
+# 	-D_GLIBCXX_USE_CXX11_ABI=0 \
+# 	-Wl,-rpath,$$ORIGIN:$(PYTORCH_PATH)/lib
+# PYBIND = $(COMMON) -fPIC -Wall -shared -DLUKE_PYBIND
+
+# COMMON = $(DEBUG) -std=c++17 -mavx -pthread -I$(PYTHON_INCLUDE)\
+# 	-I$(PYBIND_PATH)/include \
+# 	-I$(PYTORCH_PATH)/include \
+# 	-I$(PYTORCH_PATH)/include/torch/csrc/api/include \
+# 	-L$(PYTORCH_PATH)/lib \
+# 	-DLUKE_PYTORCH \
+# 	-Wl,-rpath,'$$ORIGIN'
+# PYBIND = $(COMMON) -fPIC -Wall -shared -DLUKE_PYBIND
+# LIBS = -ltorch -ltorch_cpu -ltorch_cuda -lc10 -lc10_cuda
 
 # extra flags for make -jN => use N parallel cores
 MAKEFLAGS += -j8
@@ -81,6 +101,7 @@ $(info $(shell mkdir -p $(DIRS)))
 # ----- start of make ----- #
 
 all: cpp py
+torch: cpp py
 cpp: $(CPPTARGETS) $(DEPENDS)
 py: $(PYTARGETS) $(DEPENDS)
 
@@ -107,9 +128,9 @@ $(PYTARGETOBJ): $(BUILDDIR)/%.o : $(SOURCEDIR)/%.cpp
 
 # build targets
 $(CPPTARGETS): $(OUTCPP)% : $(BUILDDIR)%.o $(CPPSHAREDOBJ)
-	g++ $(COMMON) $^ -o $@
+	g++ $(COMMON) $^ -o $@ $(LIB_FILES) 
 $(PYTARGETS): $(OUTPY)%.so : $(BUILDDIR)%.o $(PYSHAREDOBJ)
-	g++ $(PYBIND) $^ -o $@
+	g++ $(PYBIND) $^ -o $@ $(LIB_FILES)
 
 # if not cleaning, declare the dependencies of each object file (headers and source)
 ifneq ($(filter clean, $(MAKECMDGOALS)), clean)

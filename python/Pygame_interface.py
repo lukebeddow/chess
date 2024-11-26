@@ -673,14 +673,14 @@ class ChessWindow:
         self.render_board()
 
         self.timed_game = True
-        if ans == 0:   time_per_player = 1 * 60.0;  increment = 5.0;
-        elif ans == 1: time_per_player = 5 * 60.0;  increment = 5.0;
-        elif ans == 2: time_per_player = 10 * 60.0; increment = 0;
-        elif ans == 3: time_per_player = 30 * 60.0; increment = 0;
+        if ans == 0:   time_per_player = 1 * 60.0;  increment = 5.0
+        elif ans == 1: time_per_player = 5 * 60.0;  increment = 5.0
+        elif ans == 2: time_per_player = 10 * 60.0; increment = 0
+        elif ans == 3: time_per_player = 30 * 60.0; increment = 0
         elif ans == 4: 
             self.timed_game = False
-            time_per_player = 0.0;     
-            increment = 0;
+            time_per_player = 0.0   
+            increment = 0
             
         # now find out who goes first
         prompts  = ("What colour will you play as?", "White", "Black")
@@ -691,6 +691,15 @@ class ChessWindow:
 
         if ans == 0:    self.white_comp = False
         elif ans == 1:  self.white_comp = True
+
+        # now determine whether to use a neural network evaluator
+        prompts  = ("What engine will you play", "Traditional", "NN Eval")
+        ans = self.create_textbox(prompts)
+
+        # remove the textbox by re-rendering the board
+        self.render_board()
+
+        if ans == 1: self.game_board.use_nn_evaluator()
 
         # start a fresh clock
         self.chess_clock = ChessWindow.ChessClock(time_per_player, increment)
@@ -871,8 +880,8 @@ class ChessWindow:
             # stop the clock for this player, start it for the next
             self.chess_clock.click()
         
-            # handy for testing to be able to recreate boards
-            print(self.game_board.get_move_list())
+            # # handy for testing to be able to recreate boards
+            # print(self.game_board.get_move_list())
 
     def start(self, moves=None):
         """

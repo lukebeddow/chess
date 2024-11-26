@@ -8,39 +8,32 @@
 #include <numeric>
 #include <algorithm>
 #include <stack>
+#include <functional>
+#include <cmath>
+#include <memory>
 
 #include "board_functions.h"
 
-/*
+struct ChessboardHash {
+    std::size_t operator()(int_P* board_arr) const {
+        std::size_t seed = 0;
+        for (int i = 0; i < 120; i++) {
+            int value = board_arr[i];
+            seed ^= std::hash<int>{}(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+        return seed;
+    }
+};
 
-So, I want to keep as much working code as possible. In particular,
-printing and utility functions, such as converting between number
-and letter moves.
-
-The old code saved every board that had been visited. The new code
-does not want to do this. Instead, it should save only a hash of
-every board that has been visited, alongside its score.
-
-Or, I can save boards but be more ruthless about clearing the
-memory afterwards.
-
-The critical thing I want to do is move to a depth first search.
-So we check a line to depth 10, and save the score of the best
-move. Then we work backwards along other branches, pruning if
-they drop below either the final (or maybe intermediate) scores.
-
-For each line, we do not want to re-evaluate each board. We want
-to roll one move back, and then check the next moves in our list.
-The line itself can be defined by the sequence of moves. Then, it
-would make sense to save the evaluation, and set of candidate moves
-at each step. The tree should build recursively.
-
-Currently, my code builds up in layers. This is not necessarily bad,
-perhaps I can use the existing structure. The key is to simply
-expand less in each layer, and go up and down the structure more.
-Instead of width first, go depth first.
-
-*/
+struct TreekeyHash {
+    std::size_t operator()(std::vector<int> treeKeyVec) const {
+        std::size_t seed = 0;
+        for (int value : treeKeyVec) {
+            seed ^= std::hash<int>{}(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+        return seed;
+    }
+};
 
 struct Lookup {
     int index;
@@ -193,7 +186,9 @@ struct TreeLayer {
     void add_finished_games(std::vector<TreeKey>& id_list);
     std::vector<TreeKey> remove_duplicates(std::vector<TreeKey>& old_list);
 
+    // old: use boost hash function
     boost::hash<std::vector<int>> treeKeyHash;
+    // TreekeyHash treeKeyHash; // new hash approach, no boost dependency
 };
 
 // testing threading
@@ -281,9 +276,14 @@ public:
     /* Class variables */
     int current_move_;                          // which move are we on at layer 0
     bool fresh_tree_;
-    boost::hash<int_P[120]> hash_func_;           // board hash function
     int width_;                                   // max num replies to add to each board
     int default_cpus_;                            // num cpus if threading enabled
+
+    bool use_nn_eval = false;
+
+    // // old, use boost for hash function
+    boost::hash<int_P[120]> hash_func_;           // board hash function
+    // ChessboardHash hash_func_;                      // board hash function
 
     // likely to be depreciated
     std::vector<TreeKey> old_ids_;
@@ -338,6 +338,7 @@ public:
         int end_width;
         int width_decay;
 
+        std::vector<int> depth_vector;
         std::vector<int> width_vector;
         std::vector<int> prune_vector;
         int target_boards;
@@ -387,6 +388,9 @@ public:
     float board_ms_;
     int print_level; //0=none, 1=minimum, 2=roundup, 3=layer_by_layer, 4=all
 
+    bool use_nn_eval = false;
+    std::string nn_eval_path = LUKE_ROOTPATH "/python/nn_evaluator/traced_model.pt";
+
     Engine();
     void set_width(int width);
     void set_depth(int depth);
@@ -407,6 +411,9 @@ public:
         std::vector<TreeKey> best_replies);
     std::vector<MoveEntry> generate_engine_moves(Board board, bool white_to_play, double target_time = 5);
     std::vector<MoveEntry> generate_engine_moves_FEN(std::string fen, double target_time = 5);
+    void enable_nn_evaluator();
+    void enable_nn_evaluator(std::string path);
+    void disable_nn_evaluator();
 
 };
 
@@ -461,7 +468,8 @@ public:
     std::string get_engine_move();
     std::string get_engine_move(int target_time);
     std::string get_engine_move_no_GIL(int target_time);
-    
+    void use_nn_evaluator();
+    void use_nn_evaluator(std::string path_to_load_model);
 };
 
 class Game
@@ -477,6 +485,8 @@ public:
     Game();
     void play_terminal(bool human_first);
     Move get_human_move(Board board, bool white_to_play);
+    void use_nn_evaluator();
+    void use_nn_evaluator(std::string path_to_load_model);
 
     bool is_move_legal(Board board, bool white_to_play, std::string move_string);
     Board human_move(Board board, bool white_to_play, std::string move_string);

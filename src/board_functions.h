@@ -3,7 +3,10 @@
 
 #include <iostream>
 #include <vector>
-//#include <Windows.h>
+
+#if defined(LUKE_PYTORCH)
+    #include "torch/script.h"
+#endif
 
 typedef int int_P; // piece int, signed, -7 to +7 (int8_t)
 typedef int int_B; // board array int, unsigned, 0 to 120
@@ -251,27 +254,35 @@ struct generated_moves_struct {
     bool is_mating_move() { return mating_move; }
 };
 
+// #define LUKE_PYTORCH
+
 struct BoardVectors {
 
-    std::vector<int> wP = std::vector<int>(64);
-    std::vector<int> wN = std::vector<int>(64);
-    std::vector<int> wB = std::vector<int>(64); 
-    std::vector<int> wR = std::vector<int>(64); 
-    std::vector<int> wQ = std::vector<int>(64); 
-    std::vector<int> wK = std::vector<int>(64); 
-    std::vector<int> bP = std::vector<int>(64); 
-    std::vector<int> bN = std::vector<int>(64); 
-    std::vector<int> bB = std::vector<int>(64); 
-    std::vector<int> bR = std::vector<int>(64); 
-    std::vector<int> bQ = std::vector<int>(64); 
-    std::vector<int> bK = std::vector<int>(64); 
-    std::vector<int> wKS = std::vector<int>(64);
-    std::vector<int> wQS = std::vector<int>(64);
-    std::vector<int> bKS = std::vector<int>(64);
-    std::vector<int> bQS = std::vector<int>(64);
-    std::vector<int> colour = std::vector<int>(64);
-    std::vector<int> total_moves = std::vector<int>(64);
-    std::vector<int> no_take_ply = std::vector<int>(64);
+    #if defined(LUKE_PYTORCH)
+        typedef int vectype;
+    #else
+        typedef int vectype;
+    #endif
+
+    std::vector<vectype> wP = std::vector<vectype>(64);
+    std::vector<vectype> wN = std::vector<vectype>(64);
+    std::vector<vectype> wB = std::vector<vectype>(64); 
+    std::vector<vectype> wR = std::vector<vectype>(64); 
+    std::vector<vectype> wQ = std::vector<vectype>(64); 
+    std::vector<vectype> wK = std::vector<vectype>(64); 
+    std::vector<vectype> bP = std::vector<vectype>(64); 
+    std::vector<vectype> bN = std::vector<vectype>(64); 
+    std::vector<vectype> bB = std::vector<vectype>(64); 
+    std::vector<vectype> bR = std::vector<vectype>(64); 
+    std::vector<vectype> bQ = std::vector<vectype>(64); 
+    std::vector<vectype> bK = std::vector<vectype>(64); 
+    std::vector<vectype> wKS = std::vector<vectype>(64);
+    std::vector<vectype> wQS = std::vector<vectype>(64);
+    std::vector<vectype> bKS = std::vector<vectype>(64);
+    std::vector<vectype> bQS = std::vector<vectype>(64);
+    std::vector<vectype> colour = std::vector<vectype>(64);
+    std::vector<vectype> total_moves = std::vector<vectype>(64);
+    std::vector<vectype> no_take_ply = std::vector<vectype>(64);
 
     bool squares_evaluated = false;
     std::vector<int> sq_evals = std::vector<int>(64);
@@ -289,6 +300,13 @@ struct BoardVectors {
 //                    1, 1, 2, 2, 2, 2, 1, 1 };  // 8
 //    
 //};
+
+
+#if defined(LUKE_PYTORCH)
+    void init_nn(std::string loadpath);
+    bool is_nn_loaded();
+    generated_moves_struct generate_moves_nn(Board& board, bool white_to_play);
+#endif
 
 /* Functions */
 
