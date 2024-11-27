@@ -10,6 +10,7 @@ import argparse
 import numpy as np
 from scipy.stats import spearmanr
 import gc
+from train_nn_evaluator import EvalDataset
 
 Move = namedtuple("Move",
                   ("move_letters", "eval", "depth", "ranking"))
@@ -358,12 +359,47 @@ def generate_sf_data(args):
   if args.log_level >= 1:
     print(f"Finished assembling data, total time taken = {tend - tstart:.1f} seconds ({(tend - tstart) / num_rand:.1f}s per position)")
 
+def benchmark_speed(args):
+  """
+  Measure the speed of generate_moves()
+  """
+
+  num_positions = 4096
+  num_rand = 4096
+
+  # determine how many positions to load
+  files_to_load = ((num_positions - 1) // num_rand) + 1
+  
+  # load a set of chess positions
+  datapath = "/home/luke/chess/python/gamedata/samples"
+  eval_file_template = "random_n={0}_sample"
+  inds = list(range(1, files_to_load + 1))
+  log_level = 1
+  dataset = EvalDataset(datapath, eval_file_template.format(num_rand),
+                        indexes=inds, log_level=log_level)
+  
+  # prepare the engine
+  engine = tf.Engine()
+  
+  # loop over each position and measure the time
+  t1 = time.process_time()
+
+  for i in range(num_positions):
+    gen_moves_struct = bf.generate_moves_FEN(dataset.positions[i].fen_string)
+
+  t2 = time.process_time()
+
+  time_per = (t2 - t1) / num_positions
+
+  print(f"Time per position = {time_per * 1000:.3f} ms, from {num_positions} positions, total time = {(t2 - t1):.1f} s")
+
 if __name__ == "__main__":
 
   parser = argparse.ArgumentParser()
   parser.add_argument("-j", "--job", type=int, default=1)                 # job input number
   parser.add_argument("--evaluate-engine", action="store_true")     # compare my engine against stockfish
   parser.add_argument("--generate-data", action="store_true")       # generate stockfish data
+  parser.add_argument("-b", "--benchmark-speed", action="store_true") # measure the speed of 'generate_moves'
   parser.add_argument("--num-rand", type=int, default=10)           # number of random samples
   parser.add_argument("--num-threads", type=int, default=1)         # number of cpu threads to allocate to stockfish
   parser.add_argument("--target-depth", type=int, default=20)       # stockfish target depth for evaluations
@@ -381,6 +417,9 @@ if __name__ == "__main__":
 
   elif args.evaluate_engine:
     evaluate_engine(args)
+
+  elif args.benchmark_speed:
+    benchmark_speed(args)
 
   else:
     print("assemble_data.py error: expected either --generate-data or --evaluate-engine")
