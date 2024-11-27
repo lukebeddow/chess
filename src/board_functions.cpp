@@ -885,9 +885,6 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
     piece_moves_struct movements;               // store how pieces move
     piece_attack_defend_struct output;          // store output of this function
 
-    // reserve space in the piece view vector
-    output.piece_view.reserve(63);
-
     // initialise variables
     bool pawn = false;          // is this piece a pawn
     bool first_loop = true;     // are we on the first loop
@@ -1023,7 +1020,6 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
 
                     // save the view of the piece
                     if (not first_loop) {
-                        output.piece_view.push_back(dest_sq);
                         output.piece_view_push_back(dest_sq);
                     }
 
@@ -1697,7 +1693,11 @@ bool is_checkmate(Board& board, int king_index, int player_colour,
             else pawn_square_two = 0;
 
             // loop through all the pieces that see this square to find pawns
-            for (int view : pad_struct.piece_view) {
+            int num_views = pad_struct.piece_view_ind;
+            for (int view_ind = 0; view_ind < num_views; view_ind++) {
+
+                int view = pad_struct.piece_view_arr[view_ind];
+
                 // if the piece seen is where a pawn can move from
                 if (view == pawn_square_one or
                     view == pawn_square_two) {
@@ -3366,10 +3366,10 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
 
     generated_moves_struct generated_moves;
     piece_attack_defend_struct temp_pad_struct;     // for piece analysis
-    std::vector<int> piece_view;                    // piece views
     bool mate = false;                              // checkmate found?
     bool next_to_play = not white_to_play;          // who plays next
 
+    // create a container for a 'vector' of piece views
     piece_attack_defend_struct piece_view_struct;
 
     /* set in the board who plays next, so hashes of the same board with a different
@@ -3418,46 +3418,27 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
         int dest_ind = (dest_sq - 21) - 2 * ((dest_sq / 10) - 2);
 
         // has the destination square not already got piece view filled in
-        // if (tlm_struct.square_info[dest_ind].piece_view.size() == 0) {
         if (tlm_struct.square_info[dest_ind].piece_view_ind == 0) {
 
             // we need to find the piece view (any piece/colour will do)
             temp_pad_struct = piece_attack_defend(board, dest_sq, BoardSq::wK, 1);
-
-            piece_view = temp_pad_struct.piece_view;
             piece_view_struct.piece_view_arr = temp_pad_struct.piece_view_arr;
             piece_view_struct.piece_view_ind = temp_pad_struct.piece_view_ind;
-
-            //piece_view = find_view(board, dest_sq);
         }
         else {
-
-            piece_view = tlm_struct.square_info[dest_ind].piece_view;
-
             piece_view_struct.piece_view_arr = tlm_struct.square_info[dest_ind].piece_view_arr;
             piece_view_struct.piece_view_ind = tlm_struct.square_info[dest_ind].piece_view_ind;
         }
 
         // add the destination square itself to the piece view
-        piece_view.push_back(dest_sq);
         piece_view_struct.piece_view_push_back(dest_sq);
 
         // now we add the piece view of the start square (without duplicates)
-        for (int v : tlm_struct.square_info[start_ind].piece_view) {
-            if (not is_in(piece_view, v)) {
-                piece_view.push_back(v);
-            }
-        }
         for (int i = 0; i < tlm_struct.square_info[start_ind].piece_view_ind; i++) {
             if (not is_in_arr(piece_view_struct.piece_view_arr, piece_view_struct.piece_view_ind, 
                 tlm_struct.square_info[start_ind].piece_view_arr[i])) {
                 piece_view_struct.piece_view_push_back(tlm_struct.square_info[start_ind].piece_view_arr[i]);
             }
-        }
-
-        if (piece_view.size() != piece_view_struct.piece_view_ind) throw std::runtime_error("length wrong");
-        for (int i = 0; i < piece_view.size(); i++) {
-            if (piece_view[i] != piece_view_struct.piece_view_arr[i]) throw std::runtime_error("wrong val");
         }
 
         //// FOR TESTING
@@ -3500,9 +3481,6 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
                                 board.arr[step] == BoardSq::bP) {
 
                                 // if we find a pawn, finish searching
-                                if (not is_in(piece_view, step)) {
-                                    piece_view.push_back(step);
-                                }
                                 if (not is_in_arr(piece_view_struct.piece_view_arr, piece_view_struct.piece_view_ind, step)) {
                                     piece_view_struct.piece_view_push_back(step);
                                 }
@@ -3539,9 +3517,6 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
                                 board.arr[step] == BoardSq::bP) {
 
                                 // if we find a pawn, finish searching
-                                if (not is_in(piece_view, step)) {
-                                    piece_view.push_back(step);
-                                }
                                 if (not is_in_arr(piece_view_struct.piece_view_arr, piece_view_struct.piece_view_ind, step)) {
                                     piece_view_struct.piece_view_push_back(step);
                                 }
@@ -3562,24 +3537,15 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
         // if it is capture en passant, ensure we include the captured square
         if (move_mod == MoveMod::captureEnPassant) {
             if (white_to_play) {
-
-                if (not is_in(piece_view, dest_sq - 10)) {
-                    piece_view.push_back(dest_sq - 10);
-                }
                 if (not is_in_arr(piece_view_struct.piece_view_arr, piece_view_struct.piece_view_ind, dest_sq - 10)) {
                     piece_view_struct.piece_view_push_back(dest_sq - 10);
                 }
                 
             }
             else {
-
-                if (not is_in(piece_view, dest_sq + 10)) {
-                    piece_view.push_back(dest_sq + 10);
-                }
                 if (not is_in_arr(piece_view_struct.piece_view_arr, piece_view_struct.piece_view_ind, dest_sq + 10)) {
                     piece_view_struct.piece_view_push_back(dest_sq + 10);
                 }
-
             }
         }
 
@@ -3600,26 +3566,16 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
             temp_pad_struct = piece_attack_defend(board, rook_sq, BoardSq::wK, 1);
 
             // add the piece view of the rook after moving (without duplicates)
-            // for (int v : temp_pad_struct.piece_view) {
             for (int vv = 0; vv < temp_pad_struct.piece_view_ind; vv++) {
 
                 int v = temp_pad_struct.piece_view_arr[vv];
 
-                if (not is_in(piece_view, v)) {
-                    piece_view.push_back(v);
-                }
                 if (not is_in_arr(piece_view_struct.piece_view_arr, piece_view_struct.piece_view_ind, v)) {
                     piece_view_struct.piece_view_push_back(v);
                 }
             }
 
-            piece_view.push_back(rook_sq);
             piece_view_struct.piece_view_push_back(rook_sq);
-        }
-
-        if (piece_view.size() != piece_view_struct.piece_view_ind) throw std::runtime_error("length wrong 2");
-        for (int i = 0; i < piece_view.size(); i++) {
-            if (piece_view[i] != piece_view_struct.piece_view_arr[i]) throw std::runtime_error("wrong val 2");
         }
 
         // copy the base board
@@ -3666,7 +3622,6 @@ generated_moves_struct generate_moves(Board& board, bool white_to_play)
 
         // loop through view squares and recalculate their value
         int num_piece_views = piece_view_struct.piece_view_ind;
-        // for (int view : piece_view) {
         for (int vv = 0; vv < num_piece_views; vv++) {
 
             int view = piece_view_struct.piece_view_arr[vv];

@@ -359,7 +359,7 @@ def generate_sf_data(args):
   if args.log_level >= 1:
     print(f"Finished assembling data, total time taken = {tend - tstart:.1f} seconds ({(tend - tstart) / num_rand:.1f}s per position)")
 
-def benchmark_speed(args):
+def benchmark_speed(args, repeats=1):
   """
   Measure the speed of generate_moves()
   """
@@ -381,17 +381,28 @@ def benchmark_speed(args):
   # prepare the engine
   engine = tf.Engine()
   
-  # loop over each position and measure the time
-  t1 = time.process_time()
+  avg_time_per = 0
 
-  for i in range(num_positions):
-    gen_moves_struct = bf.generate_moves_FEN(dataset.positions[i].fen_string)
+  for j in range(repeats):
+  
+    # loop over each position and measure the time
+    # t1 = time.process_time()
+    t1 = time.perf_counter()
 
-  t2 = time.process_time()
+    for i in range(num_positions):
+      gen_moves_struct = bf.generate_moves_FEN(dataset.positions[i].fen_string)
 
-  time_per = (t2 - t1) / num_positions
+    # t2 = time.process_time()
+    t2 = time.perf_counter()
 
-  print(f"Time per position = {time_per * 1000:.3f} ms, from {num_positions} positions, total time = {(t2 - t1):.1f} s")
+    time_per = (t2 - t1) / num_positions
+    avg_time_per += time_per
+
+    print(f"Time per position = {time_per * 1000:.3f} ms, from {num_positions} positions, total time = {(t2 - t1):.1f} s")
+
+  time_per = avg_time_per / repeats
+  print(f"Average from {repeats} repeats: time per position = {time_per * 1000:.3f} ms")
+  
 
 if __name__ == "__main__":
 
@@ -419,7 +430,7 @@ if __name__ == "__main__":
     evaluate_engine(args)
 
   elif args.benchmark_speed:
-    benchmark_speed(args)
+    benchmark_speed(args, repeats=5)
 
   else:
     print("assemble_data.py error: expected either --generate-data or --evaluate-engine")

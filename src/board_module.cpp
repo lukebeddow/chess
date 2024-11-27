@@ -17,10 +17,6 @@ PYBIND11_MODULE(board_module, m) {
 
     py::class_<piece_attack_defend_struct>(m, "piece_attack_defend_struct")
         .def(py::init<>())
-        .def("get_attack_list", &piece_attack_defend_struct::get_attack_list)
-        .def("get_attack_me", &piece_attack_defend_struct::get_attack_me)
-        .def("get_defend_me", &piece_attack_defend_struct::get_defend_me)
-        .def("get_piece_view", &piece_attack_defend_struct::get_piece_view)
         .def("get_evalution", &piece_attack_defend_struct::get_evaluation)
         ;
 
@@ -35,7 +31,6 @@ PYBIND11_MODULE(board_module, m) {
         .def("get_phase", &total_legal_moves_struct::get_phase)
         .def("get_phase_adjust", &total_legal_moves_struct::get_phase_adjust)
         .def("get_old_value", &total_legal_moves_struct::get_old_value)
-        .def("get_piece_view", &total_legal_moves_struct::get_piece_view)
         ;
 
     py::class_<phase_struct>(m, "phase_struct")
