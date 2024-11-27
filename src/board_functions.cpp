@@ -885,6 +885,13 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
     piece_moves_struct movements;               // store how pieces move
     piece_attack_defend_struct output;          // store output of this function
 
+    // pre-reserve space
+    constexpr int rfac = 10;
+    output.attack_list.reserve(rfac * 3);
+    output.attack_me.reserve(rfac * 3);
+    output.defend_me.reserve(rfac * 3);
+    output.piece_view.reserve(rfac * 5);
+
     // initialise variables
     bool pawn = false;          // is this piece a pawn
     bool first_loop = true;     // are we on the first loop
@@ -1021,6 +1028,7 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                     // save the view of the piece
                     if (not first_loop) {
                         output.piece_view.push_back(dest_sq);
+                        // output.piece_view_push_back(dest_sq);
                     }
 
                     // keep checking squares for piece_view
@@ -1045,16 +1053,22 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
 
                             // check if the sight of this piece is blocked
                             if (friendly_block) {
-                                output.defend_me.insert(output.defend_me.end(),
-                                    { dest_sq, sq_value, 20 + block_piece });
+                                output.defend_me.push_back(dest_sq);
+                                output.defend_me.push_back(sq_value);
+                                output.defend_me.push_back(20 + block_piece);
+                                output.defend_me_push_back(dest_sq, sq_value, 20 + block_piece);
                             }
                             else if (hostile_block) {
-                                output.defend_me.insert(output.defend_me.end(),
-                                    { dest_sq, sq_value, 30 + block_piece });
+                                output.defend_me.push_back(dest_sq);
+                                output.defend_me.push_back(sq_value);
+                                output.defend_me.push_back(30 + block_piece);
+                                output.defend_me_push_back(dest_sq, sq_value, 30 + block_piece);
                             }
                             else {
-                                output.defend_me.insert(output.defend_me.end(),
-                                    { dest_sq, sq_value, defend });
+                                output.defend_me.push_back(dest_sq);
+                                output.defend_me.push_back(sq_value);
+                                output.defend_me.push_back(defend);
+                                output.defend_me_push_back(dest_sq, sq_value, defend);
 
                                 // we are behind a friendly piece along this line
                                 friendly_defender = true;
@@ -1136,8 +1150,10 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                                         and (dest_sq / 10 == our_pass_rank + sign)) {
                                         if (board.arr[our_pass_adj - (square_num + passant_sq)] == BoardSq::yes) {
                                             // hence the pawn can attack us en passant
-                                            output.attack_me.insert(output.attack_me.end(),
-                                                { dest_sq, sq_value, attack });
+                                            output.attack_me.push_back(dest_sq);
+                                            output.attack_me.push_back(sq_value);
+                                            output.attack_me.push_back(attack);
+                                            output.attack_me_push_back(dest_sq, sq_value, attack);
                                             attack -= 1;
                                             hostile_attacker = true;
                                             block_piece = sq_value;
@@ -1150,8 +1166,10 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                                         and not
                                         (pawn and (dest_sq != pawn_attacks[0] and
                                             dest_sq != pawn_attacks[1]))) {
-                                        output.attack_list.insert(output.attack_list.end(),
-                                            { dest_sq, sq_value, priority });
+                                        output.attack_list.push_back(dest_sq);
+                                        output.attack_list.push_back(sq_value);
+                                        output.attack_list.push_back(priority);
+                                        output.attack_list_push_back(dest_sq, sq_value, priority);
 
                                         priority -= 1;
                                     }
@@ -1173,32 +1191,44 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
 
                             // check if the sight of the piece is blocked
                             if (friendly_block) {
-                                output.attack_me.insert(output.attack_me.end(),
-                                    { dest_sq, sq_value, -20 - block_piece });
+                                output.attack_me.push_back(dest_sq);
+                                output.attack_me.push_back(sq_value);
+                                output.attack_me.push_back(-20 - block_piece);
+                                output.attack_me_push_back(dest_sq, sq_value, -20 - block_piece);
                                 // check if we can attack the piece
                                 if ((our_piece == move_group_one[i] or
                                     our_piece == move_group_two[i])
                                     and not
                                     (pawn and (dest_sq != pawn_attacks[0] and
-                                        dest_sq != pawn_attacks[1])))
-                                    output.attack_list.insert(output.attack_list.end(),
-                                        { dest_sq, sq_value, -20 - block_piece});
+                                        dest_sq != pawn_attacks[1]))) {
+                                    output.attack_list.push_back(dest_sq);
+                                    output.attack_list.push_back(sq_value);
+                                    output.attack_list.push_back(-20 - block_piece);
+                                    output.attack_list_push_back(dest_sq, sq_value, -20 - block_piece);
+                                }
                             }
                             else if (hostile_block) {
-                                output.attack_me.insert(output.attack_me.end(),
-                                    { dest_sq, sq_value, -30 - block_piece });
+                                output.attack_me.push_back(dest_sq);
+                                output.attack_me.push_back(sq_value);
+                                output.attack_me.push_back(-30 - block_piece);
+                                output.attack_me_push_back(dest_sq, sq_value, -30 - block_piece);
                                 // check if we can attack the piece
                                 if ((our_piece == move_group_one[i] or
                                     our_piece == move_group_two[i])
                                     and not
                                     (pawn and (dest_sq != pawn_attacks[0] and
-                                        dest_sq != pawn_attacks[1])))
-                                    output.attack_list.insert(output.attack_list.end(),
-                                        { dest_sq, sq_value, -30 - block_piece });
+                                        dest_sq != pawn_attacks[1]))) {
+                                    output.attack_list.push_back(dest_sq);
+                                    output.attack_list.push_back(sq_value);
+                                    output.attack_list.push_back(-30 - block_piece);
+                                    output.attack_list_push_back(dest_sq, sq_value, -30 - block_piece);
+                                }
                             }
                             else { // the sight of the piece is not blocked
-                                output.attack_me.insert(output.attack_me.end(),
-                                    { dest_sq, sq_value, attack });
+                                output.attack_me.push_back(dest_sq);
+                                output.attack_me.push_back(sq_value);
+                                output.attack_me.push_back(attack);
+                                output.attack_me_push_back(dest_sq, sq_value, attack);
                                 attack -= 1;
                                 hostile_attacker = true;
                                 block_piece = sq_value;
@@ -1209,8 +1239,10 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                                     and not
                                     (pawn and (dest_sq != pawn_attacks[0] and
                                         dest_sq != pawn_attacks[1]))) {
-                                    output.attack_list.insert(output.attack_list.end(),
-                                        { dest_sq, sq_value, priority });
+                                    output.attack_list.push_back(dest_sq);
+                                    output.attack_list.push_back(sq_value);
+                                    output.attack_list.push_back(priority);
+                                    output.attack_list_push_back(dest_sq, sq_value, priority);
 
                                     priority -= 1;
                                 }
@@ -1236,8 +1268,10 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                                     and not
                                     (pawn and (dest_sq != pawn_attacks[0] and
                                         dest_sq != pawn_attacks[1]))) {
-                                    output.attack_list.insert(output.attack_list.end(),
-                                        { dest_sq, sq_value, priority });
+                                    output.attack_list.push_back(dest_sq);
+                                    output.attack_list.push_back(sq_value);
+                                    output.attack_list.push_back(priority);
+                                    output.attack_list_push_back(dest_sq, sq_value, priority);
 
                                     priority -= 1;
                                 }
@@ -1263,16 +1297,22 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                                     dest_sq != pawn_attacks[1]))) {
                                 // is our view blocked
                                 if (friendly_block) {
-                                    output.attack_list.insert(output.attack_list.end(),
-                                        { dest_sq, sq_value, -20 - block_piece });
+                                    output.attack_list.push_back(dest_sq);
+                                    output.attack_list.push_back(sq_value);
+                                    output.attack_list.push_back(-20 - block_piece);
+                                    output.attack_list_push_back(dest_sq, sq_value, -20 - block_piece);
                                 }
                                 else if (hostile_block) {
-                                    output.attack_list.insert(output.attack_list.end(),
-                                        { dest_sq, sq_value, -30 - block_piece });
+                                    output.attack_list.push_back(dest_sq);
+                                    output.attack_list.push_back(sq_value);
+                                    output.attack_list.push_back(-30 - block_piece);
+                                    output.attack_list_push_back(dest_sq, sq_value, -30 - block_piece);
                                 }
                                 else { // our sight of the piece is not blocked
-                                    output.attack_list.insert(output.attack_list.end(),
-                                        { dest_sq, sq_value, priority });
+                                    output.attack_list.push_back(dest_sq);
+                                    output.attack_list.push_back(sq_value);
+                                    output.attack_list.push_back(priority);
+                                    output.attack_list_push_back(dest_sq, sq_value, priority);
                                 }
                             }
 
@@ -1327,22 +1367,28 @@ piece_attack_defend_struct piece_attack_defend(Board& board, int square_num,
                         if (pawn and dest_sq / 10 == their_pass_rank) {
                             // is the passant boolean set to true
                             if (board.arr[their_pass_adj - dest_sq] == BoardSq::yes) {
-                                output.attack_list.insert(output.attack_list.end(),
-                                    { dest_sq, 1, -1 });
+                                output.attack_list.push_back(dest_sq);
+                                output.attack_list.push_back(1);
+                                output.attack_list.push_back(-1);
+                                output.attack_list_push_back(dest_sq, 1, -1);
                                 continue;
                             }
                         }
 
                         // else we attack an empty square with no capture threat
-                        output.attack_list.insert(output.attack_list.end(),
-                            { dest_sq, 0, 0 });
+                        output.attack_list.push_back(dest_sq);
+                        output.attack_list.push_back(0);
+                        output.attack_list.push_back(0);
+                        output.attack_list_push_back(dest_sq, 0, 0);
                     }
 
                     // if our piece is a king, this is a square he can be attacked from
                     // (avoid double counting in the first loop)
                     if (our_piece == BoardSq::wK and not first_loop) {
-                        output.attack_me.insert(output.attack_me.end(),
-                            { dest_sq, 0, 0 });
+                        output.attack_me.push_back(dest_sq);
+                        output.attack_me.push_back(0);
+                        output.attack_me.push_back(0);
+                        output.attack_me_push_back(dest_sq, 0, 0);
                     }
 
                 }
@@ -1374,13 +1420,23 @@ int find_pins_checks(Board& board, bool& check, bool& pin, int king_index,
     int attack_mod;                 // attack modifier
 
     // loop through any attacks on the king
-    int loop_num = king_pad_struct.attack_me.size() / 3;
+    int loop_num = king_pad_struct.attack_me_ind;
+    if (loop_num != king_pad_struct.attack_me.size() / 3) throw std::runtime_error("length");
+
     for (int i = 0; i < loop_num; i++) {
 
         // extract the details of the attack
-        attack_sq = king_pad_struct.attack_me[(i * 3) + 0];
-        attack_piece = king_pad_struct.attack_me[(i * 3) + 1];
-        attack_mod = king_pad_struct.attack_me[(i * 3) + 2];
+        int attack_sq_old = king_pad_struct.attack_me[(i * 3) + 0];
+        int attack_piece_old = king_pad_struct.attack_me[(i * 3) + 1];
+        int attack_mod_old = king_pad_struct.attack_me[(i * 3) + 2];
+
+        attack_sq = king_pad_struct.attack_me_arr[i].dest_sq;
+        attack_piece = king_pad_struct.attack_me_arr[i].sq_value;
+        attack_mod = king_pad_struct.attack_me_arr[i].mod;
+
+        if (attack_sq_old != attack_sq) throw std::runtime_error("attack");
+        if (attack_piece_old != attack_piece) throw std::runtime_error("attack");
+        if (attack_mod_old != attack_mod) throw std::runtime_error("attack");
 
         // reset pin counter to zero
         num_pinned = 0;
@@ -1512,10 +1568,14 @@ bool king_walks(Board& board, int king_index, int player_colour,
     board.set(king_index, 0);
 
     // loop through the squares the king can move to
-    int loop_num = king_pad_struct.attack_list.size() / 3;
+    int loop_num = king_pad_struct.attack_list_ind;
+    if (loop_num != king_pad_struct.attack_list.size() / 3) throw std::runtime_error("length");
+
     for (int i = 0; i < loop_num; i++) {
 
-        check_square = king_pad_struct.attack_list[(i * 3)];
+        int check_square_2 = king_pad_struct.attack_list[(i * 3)];
+        check_square = king_pad_struct.attack_list_arr[i].dest_sq;
+        if (check_square_2 != check_square) throw std::runtime_error("check");
 
         // is this square attacked by an opposing piece
         is_attacked = is_in_check(board, check_square, player_colour);
@@ -1524,7 +1584,7 @@ bool king_walks(Board& board, int king_index, int player_colour,
         if (not is_attacked) {
             // we add a new element to walk_squares
             walk_squares.push_back(king_index);
-            walk_squares.push_back(king_pad_struct.attack_list[(i * 3)]);
+            walk_squares.push_back(check_square);
             // determine the move modifier
             if (board.arr[check_square] == 0) {
                 walk_squares.push_back(1);          // move = 1
@@ -1721,13 +1781,23 @@ bool is_checkmate(Board& board, int king_index, int player_colour,
         }
 
         // now check if other pieces can block checkmate
-        int num_loops = pad_struct.defend_me.size() / 3;
+        int num_loops_old = pad_struct.defend_me.size() / 3;
+        int num_loops = pad_struct.defend_me_ind;
+        if (num_loops != num_loops_old) throw std::runtime_error("defend length");
         for (int i = 0; i < num_loops; i++) {
 
             // extract information about the defending piece
-            defend_sq = pad_struct.defend_me[(i * 3) + 0];
-            defend_piece = pad_struct.defend_me[(i * 3) + 1];
-            defend_mod = pad_struct.defend_me[(i * 3) + 2];
+            int defend_sq_old = pad_struct.defend_me[(i * 3) + 0];
+            int defend_piece_old = pad_struct.defend_me[(i * 3) + 1];
+            int defend_mod_old = pad_struct.defend_me[(i * 3) + 2];
+
+            defend_sq = pad_struct.defend_me_arr[i].dest_sq;
+            defend_piece = pad_struct.defend_me_arr[i].sq_value;
+            defend_mod = pad_struct.defend_me_arr[i].mod;
+
+            if (defend_sq != defend_sq_old) throw std::runtime_error("defend_sq");
+            if (defend_piece != defend_piece_old) throw std::runtime_error("defend_piece");
+            if (defend_mod != defend_mod_old) throw std::runtime_error("defend_mod");
 
             // check if the piece in question is a king - it can't block itself
             if (defend_piece == BoardSq::wK) {
@@ -1877,6 +1947,59 @@ int linear_insert(int value, int start_index, std::vector<int>& vec)
     vec.push_back(value);
 
     return vec.size() - 1;
+}
+
+std::vector<int> order_attackers_defenders_array(std::vector<int>& pieces, std::vector<int>& indexes, 
+    std::array<StartDestMod, piece_attack_defend_struct::arr_size>& master_list, int master_size)
+{  /* This function orders a list of attackers or defenders, putting them in the
+      order they would attack so the least valuable pieces attack first eg a pawn
+      before a queen. It needs the indexes and master list to correctly handle
+      pieces that get uncovered during a sequence of attacks. */
+
+    std::vector<int> ordered_list;  // final list of ordered attackers/defenders
+
+    // traverse the vector of pieces
+    int i = 0;
+    int j;
+    for (int value : pieces) {
+
+        // insert into our order list in ascending order
+        j = linear_insert(value, 0, ordered_list);
+        i += 1;
+
+        // check if this piece attacking uncovers another
+        int uncover = (indexes[i - 1] + 1);
+        if (master_size > uncover and
+            (master_list[uncover].mod == -2 or
+                master_list[uncover].mod == 2)) {
+            // we have another piece to add to the list
+            j = linear_insert(master_list[uncover].sq_value, j, ordered_list);
+            i += 1;
+            // check if this piece attacking uncovers another
+            uncover += 1;
+            if (master_size > uncover and
+                (master_list[uncover].mod == -3 or
+                    master_list[uncover].mod == 3)) {
+                // we have another piece to add to the list
+                j = linear_insert(master_list[uncover].sq_value, j, ordered_list);
+                i += 1;
+            }
+        }
+
+        // TESTING CODE: prevent vector overflow for line -> int uncover = (indexes[i - 1] + 1) * 3;
+        if (i > pieces.size() - 1) {
+            break;
+        }
+    }
+
+    //// FOR TESTING
+    //std::cout << "The ordered list is: ";
+    //for (int x : ordered_list) {
+    //    std::cout << x << ", ";
+    //}
+    //std::cout << '\n';
+
+    return ordered_list;
 }
 
 std::vector<int> order_attackers_defenders(std::vector<int>& pieces,
@@ -2172,13 +2295,24 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
     // are we a pawn.....? are we a passed pawn.....?
 
     // go through the squares this piece attacks, and rate its attack strength
-    int loop_num = pad_struct.attack_list.size() / 3;
+    int loop_num_old = pad_struct.attack_list.size() / 3;
+    int loop_num = pad_struct.attack_list_ind;
+    if (loop_num != loop_num_old) throw std::runtime_error("eval length");
+
     for (int i = 0; i < loop_num; i++) {
 
         // extract the details of the attack
-        int attack_sq = pad_struct.attack_list[(i * 3) + 0];
-        // int attack_piece = pad_struct.attack_list[(i * 3) + 1];
-        int attack_mod = pad_struct.attack_list[(i * 3) + 2];
+        int attack_sq_old = pad_struct.attack_list[(i * 3) + 0];
+        int attack_piece_old = pad_struct.attack_list[(i * 3) + 1];
+        int attack_mod_old = pad_struct.attack_list[(i * 3) + 2];
+
+        int attack_sq = pad_struct.attack_list_arr[i].dest_sq;
+        int attack_piece = pad_struct.attack_list_arr[i].sq_value;
+        int attack_mod = pad_struct.attack_list_arr[i].mod;
+
+        if (attack_sq != attack_sq_old) throw std::runtime_error("eval attack_sq");
+        if (attack_piece != attack_piece_old) throw std::runtime_error("eval attack_piece");
+        if (attack_mod != attack_mod_old) throw std::runtime_error("eval attack_mod");
 
         // bonus applied upon attacking a square
         constexpr int bump = 5;
@@ -2328,13 +2462,24 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
         int vunerability_penalty;   // evaluation penalty for this defensive vunerability
 
         // loop through all the squares the king is vunerable from
-        int loop_num = pad_struct.attack_me.size() / 3;
+        int loop_num_old = pad_struct.attack_me.size() / 3;
+        int loop_num = pad_struct.attack_me_ind;
+        if (loop_num != loop_num_old) throw std::runtime_error("eval length 2");
+
         for (int i = 0; i < loop_num; i++) {
 
             // extract the details of the attack
-            int attack_sq = pad_struct.attack_me[(i * 3) + 0];
-            // int attack_piece = pad_struct.attack_me[(i * 3) + 1];
-            int attack_mod = pad_struct.attack_me[(i * 3) + 2];
+            int attack_sq_old = pad_struct.attack_me[(i * 3) + 0];
+            int attack_piece_old = pad_struct.attack_me[(i * 3) + 1];
+            int attack_mod_old = pad_struct.attack_me[(i * 3) + 2];
+
+            int attack_sq = pad_struct.attack_me_arr[i].dest_sq;
+            int attack_piece = pad_struct.attack_me_arr[i].sq_value;
+            int attack_mod = pad_struct.attack_me_arr[i].mod;
+
+            if (attack_sq != attack_sq_old) throw std::runtime_error("eval attack_sq 2");
+            if (attack_piece != attack_piece_old) throw std::runtime_error("eval attack_piece 2");
+            if (attack_mod != attack_mod_old) throw std::runtime_error("eval attack_mod 2");
 
             // if the square is empty
             if (attack_mod == 0) {
@@ -2398,13 +2543,23 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
         std::vector<int> defender_indexes;  // vector of indexes for above vector
 
         // gather any attackers
-        int loop_num = pad_struct.attack_me.size() / 3;
+        int loop_num_old = pad_struct.attack_me.size() / 3;
+        int loop_num = pad_struct.attack_me_ind;
+        if (loop_num != loop_num_old) throw std::runtime_error("eval length 3");
         for (int i = 0; i < loop_num; i++) {
 
             // extract the details of the attack
-            // int attack_sq = pad_struct.attack_me[(i * 3) + 0];
-            int attack_piece = pad_struct.attack_me[(i * 3) + 1];
-            int attack_mod = pad_struct.attack_me[(i * 3) + 2];
+            int attack_sq_old = pad_struct.attack_me[(i * 3) + 0];
+            int attack_piece_old = pad_struct.attack_me[(i * 3) + 1];
+            int attack_mod_old = pad_struct.attack_me[(i * 3) + 2];
+
+            int attack_sq = pad_struct.attack_me_arr[i].dest_sq;
+            int attack_piece = pad_struct.attack_me_arr[i].sq_value;
+            int attack_mod = pad_struct.attack_me_arr[i].mod;
+
+            if (attack_sq != attack_sq_old) throw std::runtime_error("eval attack_sq 2");
+            if (attack_piece != attack_piece_old) throw std::runtime_error("eval attack_piece 2");
+            if (attack_mod != attack_mod_old) throw std::runtime_error("eval attack_mod 2");
 
             if (attack_mod == -1) {
                 attacker_pieces.push_back(attack_piece);
@@ -2417,9 +2572,17 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
         for (int i = 0; i < loop_num; i++) {
 
             // extract the details of the defend
-            // int defend_sq = pad_struct.defend_me[(i * 3) + 0];
-            int defend_piece = pad_struct.defend_me[(i * 3) + 1];
-            int defend_mod = pad_struct.defend_me[(i * 3) + 2];
+            int defend_sq_old = pad_struct.defend_me[(i * 3) + 0];
+            int defend_piece_old = pad_struct.defend_me[(i * 3) + 1];
+            int defend_mod_old = pad_struct.defend_me[(i * 3) + 2];
+
+            int defend_sq = pad_struct.defend_me_arr[i].dest_sq;
+            int defend_piece = pad_struct.defend_me_arr[i].sq_value;
+            int defend_mod = pad_struct.defend_me_arr[i].mod;
+
+            if (defend_sq != defend_sq_old) throw std::runtime_error("eval defend_sq");
+            if (defend_piece != defend_piece_old) throw std::runtime_error("eval defend_piece");
+            if (defend_mod != defend_mod_old) throw std::runtime_error("eval defend_mod");
 
             if (defend_mod == 1) {
                 defender_pieces.push_back(defend_piece);
@@ -2446,9 +2609,18 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
         //}
         //std::cout << "\n";
 
-        // sort the attackers into the order they would attack (lowest value first)
-        std::vector<int> attacker_order = order_attackers_defenders(attacker_pieces,
+        // OLD: sort the attackers into the order they would attack (lowest value first)
+        std::vector<int> attacker_order_old = order_attackers_defenders(attacker_pieces,
             attacker_indexes, pad_struct.attack_me);
+
+        // sort the attackers into the order they would attack (lowest value first)
+        std::vector<int> attacker_order = order_attackers_defenders_array(attacker_pieces,
+            attacker_indexes, pad_struct.attack_me_arr, pad_struct.attack_me_ind);
+
+        if (attacker_order.size() != attacker_order_old.size()) throw std::runtime_error("attack order length");
+        for (int ijk = 0; ijk < attacker_order.size(); ijk++) {
+            if (attacker_order[ijk] != attacker_order_old[ijk]) throw std::runtime_error("attack order val");
+        }
 
         //std::cout << "attacker order is: ";
         //for (int i : attacker_order) {
@@ -2456,9 +2628,18 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
         //}
         //std::cout << "\n";
 
-        // sort the defenders into the order they would defend (lowest value first)
-        std::vector<int> defender_order = order_attackers_defenders(defender_pieces,
+        // OLD: sort the defenders into the order they would defend (lowest value first)
+        std::vector<int> defender_order_old = order_attackers_defenders(defender_pieces,
             defender_indexes, pad_struct.defend_me);
+
+        // sort the attackers into the order they would attack (lowest value first)
+        std::vector<int> defender_order = order_attackers_defenders_array(defender_pieces,
+            defender_indexes, pad_struct.defend_me_arr, pad_struct.defend_me_ind);
+
+        if (defender_order.size() != defender_order_old.size()) throw std::runtime_error("defend order length");
+        for (int ijk = 0; ijk < defender_order.size(); ijk++) {
+            if (defender_order[ijk] != defender_order_old[ijk]) throw std::runtime_error("defend order val");
+        }
 
         //std::cout << "defender order is: ";
         //for (int i : defender_order) {
