@@ -880,8 +880,8 @@ class ChessWindow:
             # stop the clock for this player, start it for the next
             self.chess_clock.click()
         
-            # handy for testing to be able to recreate boards
-            print(self.game_board.get_move_list())
+            # # handy for testing to be able to recreate boards
+            # print(self.game_board.get_move_list())
 
     def start(self, moves=None):
         """
