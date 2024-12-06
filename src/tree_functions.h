@@ -244,6 +244,7 @@ public:
     void target_prune(int target);
     std::vector<MoveEntry> get_best_moves();
     std::vector<MoveEntry> get_best_moves(TreeKey node);
+    std::vector<MoveEntry> get_best_moves(TreeKey node, int active_move);
     std::vector<MoveEntry> get_dead_moves(TreeKey node);
     void print_best_move();
     void print_best_moves();

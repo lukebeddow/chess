@@ -1899,6 +1899,11 @@ std::vector<MoveEntry> LayeredTree::get_best_moves()
 
 std::vector<MoveEntry> LayeredTree::get_best_moves(TreeKey node)
 {
+    return get_best_moves(node, active_move_);
+}
+
+std::vector<MoveEntry> LayeredTree::get_best_moves(TreeKey node, int active_move)
+{
     /* This function returns the best moves at a given node */
 
     // get the move list at the root position
@@ -1929,7 +1934,7 @@ std::vector<MoveEntry> LayeredTree::get_best_moves(TreeKey node)
         // index
         int j = start + (i * direction);
         // new comment: fine if evaluated to or deeper than the 'active_move_' depth
-        if (copy_moves[j].active_move >= active_move_) {
+        if (copy_moves[j].active_move >= active_move) {
             output_moves.push_back(copy_moves[j]);
             printed += 1;
             if (printed == limit) {
@@ -2069,6 +2074,45 @@ std::vector<TreeKey> LayeredTree::add_depth_at_key(TreeKey key)
     // get layer pointer for this key and the next layer (for the replies)
     std::shared_ptr<TreeLayer> key_layer_p = get_layer_pointer(key.layer);
     std::shared_ptr<TreeLayer> next_layer_p = get_or_create_layer_pointer(key.layer + 1); // may grow the tree
+
+    // check if this tree position has already been evaluated
+    if (key_layer_p->board_list[key.entry].move_list.size() != 0) {
+
+        bool missing_position = false;
+        std::vector<TreeKey> existing_keys;
+
+        // extract the ordered moves, based on their updated evaluations
+        int active_move_required = 0; // no criteria for active move
+        std::vector<MoveEntry> reply_moves = get_best_moves(key, active_move_required);
+
+        if (reply_moves.size() == 0) {
+            missing_position = true;
+            std::cout << "NO BEST MOVES FOUND\n";
+        }
+
+        for (int i = 0; i < reply_moves.size(); i++) {
+
+            // find out the this position of this board in the next layer
+            int existing_entry = next_layer_p->find_hash(reply_moves[i].new_hash);
+
+            if (existing_entry == -1) {
+                missing_position = true;
+                std::cout << "MISSING POSITION = TRUE\n";
+                break;
+            }
+
+            TreeKey existing_key;
+            existing_key.layer = key.layer + 1;
+            existing_key.entry = existing_entry;
+            existing_key.move_index = -1;
+            existing_key.evaluation = reply_moves[i].new_eval;
+            existing_keys.push_back(existing_key);
+        }
+
+        if (not missing_position) {
+            return existing_keys;
+        }
+    }
 
     // determine the board and who plays next
     Board board = key_layer_p->board_list[key.entry].board_state;
@@ -3120,9 +3164,9 @@ std::vector<MoveEntry> Engine::generate_engine_moves(Board board, bool white_to_
     tree_ptr->use_nn_eval = use_nn_eval;
 
     // temporary measure: hardcode the search parameters
-    std::vector<int> depth_vector {2, 4, 6, 8};
-    std::vector<int> width_vector {30, 15, 10, 5};
-    std::vector<int> prune_slack_vector {10000, 1000, 500, 250};
+    std::vector<int> depth_vector {2, 4, 8};
+    std::vector<int> width_vector {30, 15, 5};
+    std::vector<int> prune_slack_vector {10000, 1000, 250};
 
     // std::vector<int> depth_vector {1};
     // std::vector<int> width_vector {40};

@@ -118,27 +118,39 @@ def evaluate_engine(args):
   version of my engine is used. The stockfish data should be given.
   """
 
-  modelsaver = ModelSaver(data_path, log_level=args.log_level)
-
   use_depth_search = args.use_depth_search
   if use_depth_search:
     engine = tf.Engine()
   if args.log_level >= 2:
     print("Use depth search =", use_depth_search)
 
-  # load the stockfish data
+  # determine how many positions to load
+  num_positions = args.num_positions
   num_rand = args.num_rand
-  if args.loadfile_index is not None:
-    index = int(args.loadfile_index)
-  else: index = None
-  pydata = modelsaver.load(eval_file_template.format(num_rand), id=index)
+  files_to_load = ((num_positions - 1) // num_rand) + 1
+  
+  # load a set of chess positions
+  datapath = "/home/luke/chess/python/gamedata/samples"
+  eval_file_template = "random_n={0}_sample"
+  inds = list(range(1, files_to_load + 1))
+  log_level = 1
+  dataset = EvalDataset(datapath, eval_file_template.format(num_rand),
+                        indexes=inds, log_level=log_level)
+  positions = dataset.positions[:num_positions]
+
+  # # load the stockfish data
+  # num_rand = args.num_rand
+  # if args.loadfile_index is not None:
+  #   index = int(args.loadfile_index)
+  # else: index = None
+  # pydata = modelsaver.load(eval_file_template.format(num_rand), id=index)
 
   avg_eval_difference = 0
   avg_rank_coefficient = 0
   avg_p_value = 0
 
   # loop over the positions and evaluate
-  for i, position in enumerate(pydata):
+  for i, position in enumerate(positions):
 
     # extract key data
     fen = position.fen_string
@@ -209,12 +221,12 @@ def evaluate_engine(args):
             flush=True)
 
   # determine the average difference in evaluations
-  avg_eval_difference /= len(pydata)
-  avg_rank_coefficient /= len(pydata)
-  avg_p_value /= len(pydata)
+  avg_eval_difference /= len(positions)
+  avg_rank_coefficient /= len(positions)
+  avg_p_value /= len(positions)
 
   if args.log_level >= 1:
-    print(f"evaluate_engine() found:")
+    print(f"evaluate_engine() examined {num_positions} positions:")
     print(f"avg_eval_difference = {avg_eval_difference * 1e-3:.3f} (in pawns)")
     print(f"avg_rank_coefficient = {avg_rank_coefficient:.3f} (+1 is perfect agreement, 0 is random)")
     print(f"avg_p_value = {avg_p_value:.3f} (below 0.05 is significant)")
@@ -359,13 +371,14 @@ def generate_sf_data(args):
   if args.log_level >= 1:
     print(f"Finished assembling data, total time taken = {tend - tstart:.1f} seconds ({(tend - tstart) / num_rand:.1f}s per position)")
 
-def benchmark_speed(args, repeats=1):
+def benchmark_speed(args):
   """
   Measure the speed of generate_moves()
   """
 
-  num_positions = 4096
-  num_rand = 4096
+  num_positions = args.num_positions
+  num_rand = args.num_rand
+  repeats = args.repeats
 
   # determine how many positions to load
   files_to_load = ((num_positions - 1) // num_rand) + 1
@@ -410,8 +423,7 @@ if __name__ == "__main__":
   parser.add_argument("-j", "--job", type=int, default=1)                 # job input number
   parser.add_argument("--evaluate-engine", action="store_true")     # compare my engine against stockfish
   parser.add_argument("--generate-data", action="store_true")       # generate stockfish data
-  parser.add_argument("-b", "--benchmark-speed", action="store_true") # measure the speed of 'generate_moves'
-  parser.add_argument("--num-rand", type=int, default=10)           # number of random samples
+  parser.add_argument("--num-rand", type=int, default=4096)         # number of random samples
   parser.add_argument("--num-threads", type=int, default=1)         # number of cpu threads to allocate to stockfish
   parser.add_argument("--target-depth", type=int, default=20)       # stockfish target depth for evaluations
   parser.add_argument("--data-file", default="ficsgamesdb_2023_standard2000_nomovetimes.txt") # data file for stockfish generation
@@ -419,6 +431,11 @@ if __name__ == "__main__":
   parser.add_argument("--use-depth-search", action="store_true")    # use depth search for my engine
   parser.add_argument("--log-level", type=int, default=1)           # how much debug printing to do
   parser.add_argument("--random-seed", type=int, default=None)      # random seed for data generation
+
+  # settings for benchmark
+  parser.add_argument("-b", "--benchmark-speed", action="store_true") # measure the speed of 'generate_moves'
+  parser.add_argument("--repeats", default=5, type=int)             # number of benchmark repeats
+  parser.add_argument("--num-positions", type=int, default=4096)    # number of positions to test over
 
   args = parser.parse_args()
   
@@ -430,7 +447,7 @@ if __name__ == "__main__":
     evaluate_engine(args)
 
   elif args.benchmark_speed:
-    benchmark_speed(args, repeats=5)
+    benchmark_speed(args)
 
   else:
     print("assemble_data.py error: expected either --generate-data or --evaluate-engine")

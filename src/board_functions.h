@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <array>
+#include <cstring>
 
 #if defined(LUKE_PYTORCH)
     #include "torch/script.h"
@@ -93,6 +94,45 @@ struct StartDestMod {
     int dest_sq;
     int sq_value;
     int mod;
+};
+
+struct ArrayPiece {
+
+    constexpr static int array_piece_size = 16;
+    std::array<int, array_piece_size> array;
+    int size = 0;
+
+    int& operator[](int index) {
+        if (index >= array_piece_size) {
+            throw std::runtime_error("ArrayPiece error: index exceeds size");
+        }
+        return array[index];
+    }
+
+    void push_back(int new_piece) {
+        if (size >= array_piece_size) {
+            throw std::runtime_error("ArrayPiece error: size exceeded");
+        }
+        array[size] = new_piece;
+        size += 1;
+    }
+
+    void insert(int index, int value) {
+        if (size >= array_piece_size) {
+            throw std::runtime_error("ArrayPiece error: array is full");
+        }
+        if (index < 0 || index > size) { // Allow inserting at `size` to append
+            throw std::runtime_error("ArrayPiece error: index out of bounds");
+        }
+
+        // move memory block to make space for the new value
+        if (index < size) {
+            std::memmove(&array[index + 1], &array[index], (size - index) * sizeof(int));
+        }
+        
+        array[index] = value;
+        size += 1;
+    }
 };
 
 struct piece_attack_defend_struct {

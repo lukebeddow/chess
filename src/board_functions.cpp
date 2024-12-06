@@ -1880,6 +1880,94 @@ int linear_insert(int value, int start_index, std::vector<int>& vec)
     return vec.size() - 1;
 }
 
+int linear_insert_array(int value, int start_index, ArrayPiece& vec)
+{  
+    /* This function inserts a value into a vector in ascending order, starting
+    the search from the start_index. Returns the index added at */
+    
+    // if the vector is empty, add the value in
+    if (vec.size == 0) {
+        vec.push_back(value);
+        return 0;
+    }
+    // if the start index is beyond the end of the vector, add it at the end
+    else if (start_index > vec.size - 1) {
+        vec.push_back(value);
+        return vec.size - 1;
+    }
+    // else, lets traverse the vector looking for where we can insert
+    else {
+        for (int i = start_index; i < vec.size; i++) {
+            if (value < vec[i]) {
+                vec.insert(i, value);
+                return i;
+            }
+        }
+    }
+
+    // if we get here, we didn't find anywhere to insert the value
+    vec.push_back(value);
+
+    return vec.size - 1;
+}
+
+ArrayPiece order_attackers_defenders_array_2(ArrayPiece& pieces, ArrayPiece& indexes, 
+    std::array<StartDestMod, piece_attack_defend_struct::arr_size>& master_list, int master_size)
+{  /* This function orders a list of attackers or defenders, putting them in the
+      order they would attack so the least valuable pieces attack first eg a pawn
+      before a queen. It needs the indexes and master list to correctly handle
+      pieces that get uncovered during a sequence of attacks. */
+
+    // std::vector<int> ordered_list;  // final list of ordered attackers/defenders
+    ArrayPiece ordered_list;
+
+    // traverse the vector of pieces
+    int i = 0;
+    int j;
+    // for (int value : pieces) {
+    for (int v = 0; v < pieces.size; v++) {
+
+        int value = pieces[v];
+
+        // insert into our order list in ascending order
+        j = linear_insert_array(value, 0, ordered_list);
+        i += 1;
+
+        // check if this piece attacking uncovers another
+        int uncover = (indexes[i - 1] + 1);
+        if (master_size > uncover and
+            (master_list[uncover].mod == -2 or
+                master_list[uncover].mod == 2)) {
+            // we have another piece to add to the list
+            j = linear_insert_array(master_list[uncover].sq_value, j, ordered_list);
+            i += 1;
+            // check if this piece attacking uncovers another
+            uncover += 1;
+            if (master_size > uncover and
+                (master_list[uncover].mod == -3 or
+                    master_list[uncover].mod == 3)) {
+                // we have another piece to add to the list
+                j = linear_insert_array(master_list[uncover].sq_value, j, ordered_list);
+                i += 1;
+            }
+        }
+
+        // TESTING CODE: prevent vector overflow for line -> int uncover = (indexes[i - 1] + 1) * 3;
+        if (i > pieces.size - 1) {
+            break;
+        }
+    }
+
+    //// FOR TESTING
+    //std::cout << "The ordered list is: ";
+    //for (int x : ordered_list) {
+    //    std::cout << x << ", ";
+    //}
+    //std::cout << '\n';
+
+    return ordered_list;
+}
+
 std::vector<int> order_attackers_defenders_array(std::vector<int>& pieces, std::vector<int>& indexes, 
     std::array<StartDestMod, piece_attack_defend_struct::arr_size>& master_list, int master_size)
 {  /* This function orders a list of attackers or defenders, putting them in the
@@ -2446,10 +2534,15 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
 
         int defend_bonus = 0;       // boost for being defended by our pieces
 
-        std::vector<int> attacker_pieces;   // vector of attacking pieces
-        std::vector<int> attacker_indexes;  // vector of indexes for above vector
-        std::vector<int> defender_pieces;   // vector of defending pieces
-        std::vector<int> defender_indexes;  // vector of indexes for above vector
+        // std::vector<int> attacker_pieces;   // vector of attacking pieces
+        // std::vector<int> attacker_indexes;  // vector of indexes for above vector
+        // std::vector<int> defender_pieces;   // vector of defending pieces
+        // std::vector<int> defender_indexes;  // vector of indexes for above vector
+
+        ArrayPiece attacker_pieces;
+        ArrayPiece attacker_indexes;
+        ArrayPiece defender_pieces;
+        ArrayPiece defender_indexes;
 
         // gather any attackers
         int loop_num = pad_struct.attack_me_ind;
@@ -2501,8 +2594,11 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
         //std::cout << "\n";
 
         // sort the attackers into the order they would attack (lowest value first)
-        std::vector<int> attacker_order = order_attackers_defenders_array(attacker_pieces,
+        // std::vector<int> attacker_order = order_attackers_defenders_array_2(attacker_pieces,
+        //     attacker_indexes, pad_struct.attack_me_arr, pad_struct.attack_me_ind);
+        ArrayPiece attacker_order = order_attackers_defenders_array_2(attacker_pieces,
             attacker_indexes, pad_struct.attack_me_arr, pad_struct.attack_me_ind);
+
 
         //std::cout << "attacker order is: ";
         //for (int i : attacker_order) {
@@ -2511,7 +2607,9 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
         //std::cout << "\n";
 
         // sort the attackers into the order they would attack (lowest value first)
-        std::vector<int> defender_order = order_attackers_defenders_array(defender_pieces,
+        // std::vector<int> defender_order = order_attackers_defenders_array_2(defender_pieces,
+        //     defender_indexes, pad_struct.defend_me_arr, pad_struct.defend_me_ind);
+        ArrayPiece defender_order = order_attackers_defenders_array_2(defender_pieces,
             defender_indexes, pad_struct.defend_me_arr, pad_struct.defend_me_ind);
 
         //std::cout << "defender order is: ";
@@ -2521,7 +2619,7 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
         //std::cout << "\n";
 
         // is this piece defended
-        if (defender_order.size() >= attacker_order.size()) {
+        if (defender_order.size >= attacker_order.size) {
             //// OLD CODE SCALED BOOST WITH NUMBER OF DEFENDERS
             //// we will recieve a boost for every extra defender we have
             //defend_bonus = phase.piece_defended_boost *
@@ -2533,7 +2631,7 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
 
         // are we a pawn protected by another pawn?
         if (pawn) {
-            if (defender_order.size() > 0 and
+            if (defender_order.size > 0 and
                 defender_order[0] == 1) {
                 defend_bonus += phase.pawn_pawn_defender_boost;
                 // are we a protected past pawn?
@@ -2551,23 +2649,23 @@ int eval_piece(Board& board, bool white_to_play, int square_num,
         //std::cout << ", the defend bonus is " << defend_bonus;
 
         // if we are attacked, we should check the outcome of trades
-        if (attacker_order.size() > 0) {
+        if (attacker_order.size > 0) {
 
             int trade_outcome = 0;          // trade outcome from immediate attack
             int square_value = value;       // value of our piece on its square
 
             // loop through every attacker, in the order that they would attack
-            for (int i = 0; i < attacker_indexes.size(); i++) {
+            for (int i = 0; i < attacker_indexes.size; i++) {
 
                 // if there are no defenders left to take back
-                if (defender_order.size() - i < 1) {
+                if (defender_order.size - i < 1) {
                     // the piece is lost
                     trade_outcome -= 1000 * square_value;
                     break;
                 }
 
                 // if the last defender is a king and capturing back is illegal
-                if (defender_order[i] == BoardSq::wK and attacker_order.size() > i + 1) {
+                if (defender_order[i] == BoardSq::wK and attacker_order.size > i + 1) {
                     // the piece is lost
                     trade_outcome -= 1000 * square_value;
                     break;
