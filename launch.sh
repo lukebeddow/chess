@@ -1,6 +1,6 @@
 # ----- user definitions ----- #
 
-PYTHON=/home/luke/pyenv/py38_general/bin/python
+PYTHON=/home/luke/pyenv/py38_general
 SCRIPT_GEN_DATA=/home/luke/chess/python/assemble_data.py
 SCRIPT_TRAIN=/home/luke/chess/python/train_nn_evaluator.py
 LOG_FOLDER=/home/luke/chess/logs
@@ -51,7 +51,7 @@ autoGetTimestamp()
 print_table()
 {
     # print a training recap table
-    $FAKETTY $PYTHON $SCRIPT_TRAIN \
+    $FAKETTY $PYTHON_EXE $SCRIPT_TRAIN \
         --timestamp $TIMESTAMP \
         --print-table \
         ${PY_ARGS[@]}
@@ -73,6 +73,8 @@ LOGGING='Y' # logging enabled by default
 PRINTTABLE='N' # print a table
 GEN_DATA='N' # not a generate data job by default
 NUM_RAND=4096 # default number of positions to generate for
+ACTIVE_PYTHON='Y' # do we activate python automatically
+PYTHON_EXE=$PYTHON/bin/python # path to python executable
 
 # loop through input args, look for script specific arguments
 for (( i = 1; i <= "$#"; i++ ));
@@ -87,7 +89,7 @@ do
     -d | --debug ) LOGGING='N'; echo Debug mode on, terminal logging on ;;
     -g | --generate-data ) GEN_DATA='Y'; echo generate data job selected ;;
     -a | --auto-timestamp ) autoGetTimestamp ;;
-    --print-table ) PRINTTABLE='Y'; echo Preparing to print a results table ;;
+    -P | --print-table ) PRINTTABLE='Y'; echo Preparing to print a results table ;;
     # everything else passed directly to python
     * ) PY_ARGS+=( ${!i} ) ;;
   esac
@@ -96,6 +98,12 @@ done
 echo Arguments passed to python script are: ${PY_ARGS[@]}
 
 # ----- main job submission ----- #
+
+# automatically activate python
+if [ $ACTIVE_PYTHON = 'Y' ]
+then
+    source $PYTHON/bin/activate
+fi
 
 # print a training results table
 if [ $PRINTTABLE = 'Y' ]
@@ -140,7 +148,7 @@ do
     if [ $GEN_DATA = 'Y' ]
     then
         # execute data generation command in the background
-        $FAKETTY $PYTHON $SCRIPT_GEN_DATA --generate-data \
+        $FAKETTY $PYTHON_EXE $SCRIPT_GEN_DATA --generate-data \
             --job $I \
             --data-file ${FILES[$(($I % $FILE_NUM))]} \
             ${PY_ARGS[@]} \
@@ -148,7 +156,7 @@ do
             &
     else
         # run a learning command in the background
-        $FAKETTY $PYTHON $SCRIPT_TRAIN \
+        $FAKETTY $PYTHON_EXE $SCRIPT_TRAIN \
             --job $I \
             --timestamp $TIMESTAMP \
             ${PY_ARGS[@]} \

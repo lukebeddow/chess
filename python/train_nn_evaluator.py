@@ -43,6 +43,7 @@ class EvalDataset(torch.utils.data.Dataset):
     self.use_all_moves = True           # add in all child moves from a positions, instead of the parent
     self.save_sq_eval = True            # evaluate every square in the board using my handcrafted evaluator
     self.use_eval_normalisation = False # apply normalisation to all evaluations
+    self.use_parent_positions = False   # include parents when expanding 'all moves'
     self.norm_method = "standard"       # normalisation method to use, standard is mean/std scale -1/+1 bound
     self.norm_factor = None             # normalisation factors saved for future use
     self.board_dtype = torch.float      # datatype to use for torch tensors
@@ -235,6 +236,10 @@ class EvalDataset(torch.utils.data.Dataset):
 
     # loop through all positions and all child moves
     for i in range(num_pos):
+
+      if self.use_parent_positions:
+        num_lines += 1
+
       for j in range(len(self.positions[i].move_vector)):
 
         if self.positions[i].move_vector[j].move_letters == "pv":
@@ -270,9 +275,7 @@ class EvalDataset(torch.utils.data.Dataset):
 
     if self.use_all_moves:
       # count how many positions we will have
-      num_lines = 0
-      for i in range(num_pos):
-        num_lines += len(self.positions[i].move_vector)
+      num_lines = self.count_all_positions()
       if indexes_only is not None:
         if len(indexes_only) > num_lines:
           raise RuntimeError(f"EvalDataset.to_torch() error: num_lines = {num_lines}, but number of selected indexes exceeds this = {len(indexes_only)}")
@@ -305,12 +308,15 @@ class EvalDataset(torch.utils.data.Dataset):
       if break_out: break
 
       if self.use_all_moves:
-        # loop through all moves and add those boards
-        for j in range(len(self.positions[i].move_vector)):
+
+        # loop through all moves and add those boards (-1 means parent position)
+        start_at = -1 if self.use_parent_positions else 0
+
+        for j in range(start_at, len(self.positions[i].move_vector)):
 
           if break_out: break
 
-          if self.positions[i].move_vector[j].move_letters == "pv":
+          if j >= 0 and self.positions[i].move_vector[j].move_letters == "pv":
             error_moves += 1
             if indexes_only is None:
               num_lines -= 1
@@ -329,23 +335,31 @@ class EvalDataset(torch.utils.data.Dataset):
               proxy_ind += 1
               continue
 
+          this_fen = self.positions[i].fen_string
+          white_next = bf.is_white_next_FEN(this_fen)
+          if j == -1: 
+            white_next = not white_next
+            this_move = None
+            this_eval = self.positions[i].move_vector[0].eval
+          else:
+            this_move = self.positions[i].move_vector[j].move_letters
+            this_eval = self.positions[i].move_vector[j].eval
+
           if self.save_sq_eval:
             self.boards[add_ind], self.square_evals[add_ind] = self.FEN_to_torch(
-              self.positions[i].fen_string, self.positions[i].move_vector[j].move_letters, self.save_sq_eval
-            )
+              this_fen, move=this_move, eval_sqs=self.save_sq_eval)
           else:
-            self.boards[add_ind] = self.FEN_to_torch(self.positions[i].fen_string,
-                                                    self.positions[i].move_vector[j].move_letters)
+            self.boards[add_ind] = self.FEN_to_torch(this_fen, move=this_move, eval_sqs=self.save_sq_eval)
+
           # who is next from the PARENT position
-          white_next = bf.is_white_next_FEN(self.positions[i].fen_string)
-          if self.positions[i].move_vector[j].eval == "mate":
+          if this_eval == "mate":
             if not white_next:
               self.evals[add_ind] = -self.mate_value / self.stockfish_converstion
             else:
               self.evals[add_ind] = self.mate_value / self.stockfish_converstion
           else:
             sign = (white_next * 2) - 1
-            self.evals[add_ind] = self.positions[i].move_vector[j].eval * sign # if white next at parent, engine is white for child
+            self.evals[add_ind] = this_eval * sign # if white next at parent, engine is white for child
           if self.convert_evals_to_pawns:
             self.evals[add_ind] *= self.stockfish_converstion
 
@@ -1875,8 +1889,8 @@ if __name__ == "__main__":
   parser.add_argument("--double-train", action="store_true")              # train on stockfish evaluations afterwards
   parser.add_argument("--use-sf-loss", action="store_true")               # use stockfish evaluation as target
   parser.add_argument("--dataset-name", default=None)                     # name of training dataset to use
-  parser.add_argument("--train-num", type=int, default=160)               # number of data files to use for training
-  parser.add_argument("--test-num", type=int, default=7)                  # number of data files to use for testing
+  parser.add_argument("--train-num", type=int, default=177)               # number of data files to use for training
+  parser.add_argument("--test-num", type=int, default=5)                  # number of data files to use for testing
   parser.add_argument("--batch-limit", type=int, default=0)               # limit batches per file, useful for debugging
   parser.add_argument("--slice-log-rate", type=int, default=5)            # log rate for slices during an epoch
   parser.add_argument("--print-table", action="store_true")               # are we printing a results table
@@ -1903,7 +1917,7 @@ if __name__ == "__main__":
   data_dict = {
     "path" : "/home/luke/chess",
     "loadpath" : "/python/datasets",
-    "loadfolder" : "datasetv8" if args.dataset_name is None else args.dataset_name,
+    "loadfolder" : "datasetv9" if args.dataset_name is None else args.dataset_name,
     "loadname" : "data_torch",
     "savepath" : "/python/models",
     "savefolder" : f"{group_name}/{run_name}",
@@ -2048,6 +2062,39 @@ if __name__ == "__main__":
     out_features = trainer.params.network_outputs
     net = FCChessNet(in_features, out_features, num_blocks=trainer.track.param_3, 
                     dropout_prob=0.0, layer_scaling=trainer.track.param_2,
+                    block_type="simple")
+
+    # now execute the training
+    trainer.train(net=net, device=args.device)
+
+    print_time_taken()
+
+  elif args.program == "benchmark_4":
+
+    # define what to vary this training, dependent on job number
+    vary_1 = [64, 96]
+    vary_2 = [1, 2]
+    vary_3 = None
+    repeats = None
+    trainer.track.param_1_name = "layer width"
+    trainer.track.param_2_name = "num layers"
+    trainer.track.param_3_name = None
+    trainer.track.param_1, trainer.track.param_2, trainer.track.param_3 = vary_all_inputs(args.job, param_1=vary_1, param_2=vary_2,
+                                                         param_3=vary_3, repeats=repeats)
+    
+    # apply training settings
+    trainer.params.use_sf_eval = True
+    trainer.params.num_epochs = 10
+    trainer.params.learning_rate = 1e-5
+    trainer.params.loss_style = "l1"
+    trainer.params.sample_method = "weighted"
+    trainer.params.network_outputs = 64
+    
+    # create and initialise the network
+    in_features = 17
+    out_features = trainer.params.network_outputs
+    net = FCChessNet(in_features, out_features, num_blocks=trainer.track.param_2, 
+                    dropout_prob=0.0, layer_scaling=trainer.track.param_1,
                     block_type="simple")
 
     # now execute the training
