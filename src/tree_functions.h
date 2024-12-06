@@ -311,6 +311,7 @@ public:
     bool new_ids_wtp_;
     std::vector<TreeKey> finishedGames_;
     int boards_checked_ = 0;
+    int moves_checked_ = 0;
     TreeKey root_;
     bool root_wtp_;
     Board root_board_;
@@ -358,6 +359,7 @@ public:
     // details struct
     struct Details {
         int boards_checked;
+        int moves_checked;
         double ms_per_board;
         long total_ms;
     } details;

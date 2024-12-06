@@ -2136,6 +2136,7 @@ std::vector<TreeKey> LayeredTree::add_depth_at_key(TreeKey key)
     // add replies into next layer of tree (up to limit = width_)
     std::vector<TreeKey> reply_keys = add_board_replies(key, gen_moves);
     boards_checked_ += 1;
+    moves_checked_ += gen_moves.moves.size();
 
     evaluated_ids_.push_back(key);
 
@@ -2514,6 +2515,7 @@ void Engine::print_roundup(std::unique_ptr<LayeredTree>& tree_ptr)
         print_str("\tBest evaluation: " + std::to_string(analysis.best_eval * 1e-3));
         print_str("\tDepth checked to: " + std::to_string(analysis.depth_evaluated));
         print_str("\tBoards checked: " + std::to_string(details.boards_checked));
+        print_str("\tMoves checked: " + std::to_string(details.moves_checked));
         print_str("\tTotal time (s): " + std::to_string(std::round(double(details.total_ms)) * 1e-3));
         print_str("\tTime per board (ms): " + std::to_string(std::round(details.ms_per_board * 1e3) * 1e-3));
         print_str("\tBoards per second: " + std::to_string(std::round(1000.0 / details.ms_per_board)));
@@ -3207,6 +3209,7 @@ std::vector<MoveEntry> Engine::generate_engine_moves(Board board, bool white_to_
     details.total_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(end_ - start_).count();
     details.boards_checked = tree_ptr->boards_checked_;
+    details.moves_checked = tree_ptr->moves_checked_;
     details.ms_per_board = double(details.total_ms) / double(details.boards_checked);
 
     // print out a roundup of the engine generation
